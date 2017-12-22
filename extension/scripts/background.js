@@ -1,26 +1,22 @@
-// background.js
-
-// Called when the user clicks on the browser action.
-chrome.browserAction.onClicked.addListener(function(tab) {
-  // Send a message to the active tab
+chrome.webRequest.onHeadersReceived.addListener(function(details){
+  console.log(details.responseHeaders);
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
     var activeTab = tabs[0];
-    chrome.tabs.sendMessage(activeTab.id, {"message": "clicked_browser_action"});
+    chrome.tabs.sendMessage(activeTab.id, {
+      "message": "onHeadersReceived",
+      "data": details.responseHeaders
+    });
   });
-});
+}, {urls: ["<all_urls>"]}, ["blocking", "responseHeaders"]);
 
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
-    var activeTab = tabs[0];
-    chrome.tabs.sendMessage(activeTab.id, {"message": "onHeadersReceived"});
-  }
-);
+    console.log(details);
+    return {};
+  },
+  {urls: ["<all_urls>"]},
+  ["blocking", "requestBody"]);
 
-// This block is new!
-chrome.runtime.onMessage.addListener(
-  function(request, sender, sendResponse) {
-    if( request.message === "open_new_tab" ) {
-      chrome.tabs.create({"url": request.url});
-    }
-  }
-);
+
+
+console.log("background");

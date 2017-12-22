@@ -3,17 +3,12 @@
   "version": "1.0",
   "description": "My first Chrome extension.",
   "manifest_version": 2,
-  "permissions": [
-    "<all_urls>",
-    "webRequest"
-  ],
   "browser_action": {
     "default_icon": "images/icon.png"
-    //"default_popup": "popup.html"
   },
   "background": {
     "scripts": ["scripts/background.js"],
-     "persistent": true
+    "persistent": true
   },
   "content_scripts": [
     {
@@ -23,5 +18,11 @@
       "all_frames": true,
       "js": ["jquery-3.2.1.js", "scripts/content.js"]
     }
+  ],
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>",
+    "tabs"
   ]
 }

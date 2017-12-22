@@ -2,16 +2,14 @@
 
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
-    if( request.message === "clicked_browser_action" ) {
+    if( request.message === "onHeadersReceived" ) {
       var firstHref = $("a[href^='http']").eq(0).attr("href");
+      //console.log(request.message);
 
-      console.log(firstHref);
-
-      // This line is new!
-      chrome.runtime.sendMessage({"message": "open_new_tab", "url": firstHref});
-    }
-    else if (request.message === "onHeadersReceived") {
-      console.log("Hello");
+      if (request.data[0].value >= 300 && request.data[0].value < 400) {
+        console.log("Redirect");
+        console.log(request.data[0]);
+      }
     }
   }
 );
