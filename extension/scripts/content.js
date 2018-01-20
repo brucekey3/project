@@ -32,37 +32,13 @@ chrome.runtime.onMessage.addListener(
     else if (request.message === "createReport_clicked")
     {
       let id = request.data;
-      let urlReport = analyse_url();
-
-      report = {
-        "id": id,
-        "urlReport": urlReport
-      };
-
       chrome.runtime.sendMessage({
         "message": "createReportWindow",
-        "data": report
+        "data": id
       });
+      console.log("createReportWindow message sent");
     }
 });
-
-function analyse_url()
-{
-  let report = "";
-  let url = window.location.href;
-  console.log("Matching with: " + str(url));
-  var ipformat = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-  if (url.match(ipformat))
-  {
-    console.log("Matches");
-    report += "Matches IP address";
-  }
-  else {
-    console.log("Does not match");
-    report += "No IP address";
-  }
-  return report;
-}
 
 function static_analysis(script)
 {
@@ -78,6 +54,7 @@ function static_analysis(script)
   };
 }
 
+/*
 console.log("Scripts:");
 let scriptList = document.scripts;
 
@@ -86,7 +63,7 @@ for (let script of scriptList) {
   let anal = static_analysis(script.text);
   console.log(anal);
 }
-
+*/
 
 /*
 // How to send Post request + do something with result

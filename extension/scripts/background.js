@@ -1,5 +1,6 @@
-
+/*
 chrome.webRequest.onHeadersReceived.addListener(function(details){
+
   console.log("Headers:")
   console.log(details.responseHeaders);
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
@@ -9,6 +10,7 @@ chrome.webRequest.onHeadersReceived.addListener(function(details){
       "data": details.responseHeaders
     });
   });
+
 }, {urls: ["<all_urls>"]}, ["blocking", "responseHeaders"]);
 
 
@@ -19,9 +21,8 @@ chrome.webRequest.onBeforeRequest.addListener(
   },
   {urls: ["<all_urls>"]},
   ["blocking", "requestBody"]);
-
+*/
 var version = "1.0";
-let reports = {};
 
 chrome.browserAction.onClicked.addListener(function(tab) {
   console.log(tab);
@@ -57,6 +58,22 @@ function onAttachPause(tabId) {
   console.log("Paused");
 }
 
+function onAttachReport(tabId)
+{
+  if (chrome.runtime.lastError) {
+    alert(chrome.runtime.lastError.message);
+    return;
+  }
+
+  attached[tabId] = true;
+  chrome.windows.create(
+     {url: "html/report.html?" + tabId,
+      type: "popup",
+      width: 800, height: 600});
+}
+
+let attached = {};
+
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
     if( request.message === "openWindow" ) {
@@ -74,23 +91,22 @@ chrome.runtime.onMessage.addListener(
       );
     }
     else if (request.message === "createReportWindow") {
-      let report = request.data;
-      let tabId = report.id;
+      console.log("createReportWindow message received");
+
+      let tabId = request.data;
       var debuggeeId = {tabId: tabId};
 
-      reports[tabId] = report;
-
-      chrome.windows.create(
-         {url: "html/report.html?" + tabId,
-          type: "popup",
-          width: 800, height: 600});
+      if (!attached[tabId])
+      {
+        chrome.debugger.attach(debuggeeId, version,
+            onAttachReport.bind(null, tabId)
+        );
+      }
 
     }
 
+
+
 });
 
-function getReport(tabId)
-{
-  return reports[tabId];
-}
 console.log("background");
