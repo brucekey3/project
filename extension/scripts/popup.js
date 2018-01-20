@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
   //var buttons = document.querySelectorAll('button');
   document.getElementById("logHeaders").addEventListener("click", logHeadersClick);
   document.getElementById("pauseExecution").addEventListener("click", pauseExecClick);
+  document.getElementById("createReport").addEventListener("click", createReportClick);
 });
 
 
@@ -40,6 +41,18 @@ function pauseExecClick(e) {
         "data": id
     });
   });
-
-  //window.close();
 }
+
+  function createReportClick(e)
+  {
+    console.log("Creating Report");
+    chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+      var activeTab = tabs[0];
+      let id = activeTab.id;
+      console.log(id);
+      chrome.tabs.sendMessage(id, {
+          "message": "createReport_clicked",
+          "data": id
+      });
+    });
+  }

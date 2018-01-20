@@ -21,6 +21,7 @@ chrome.webRequest.onBeforeRequest.addListener(
   ["blocking", "requestBody"]);
 
 var version = "1.0";
+let reports = {};
 
 chrome.browserAction.onClicked.addListener(function(tab) {
   console.log(tab);
@@ -72,8 +73,24 @@ chrome.runtime.onMessage.addListener(
           onAttachPause.bind(null, id)
       );
     }
+    else if (request.message === "createReportWindow") {
+      let report = request.data;
+      let tabId = report.id;
+      var debuggeeId = {tabId: tabId};
+
+      reports[tabId] = report;
+
+      chrome.windows.create(
+         {url: "html/report.html?" + tabId,
+          type: "popup",
+          width: 800, height: 600});
+
+    }
 
 });
 
-
+function getReport(tabId)
+{
+  return reports[tabId];
+}
 console.log("background");
