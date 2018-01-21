@@ -9,12 +9,36 @@ let redirectThreshold = 1;
 
 window.addEventListener("load", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
   chrome.debugger.onEvent.addListener(onEvent);
+
 });
 
 window.addEventListener("unload", function() {
   chrome.debugger.detach({tabId:tabId});
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
+
 });
+
+function processInputSelector(nodeIdResults)
+{
+  let nodeIds = nodeIdResults.nodeIds;
+  for (let id in nodeIds)
+  {
+    let nodeId = nodeIds[id];
+    console.log(nodeId);
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.resolveNode", {"nodeId": nodeId}, function(object)
+    {
+      let item = object.object;
+      if (item.description.indexOf("pass") !== -1)
+      {
+        document.getElementById("passwordPresent").removeAttribute("hidden");
+        console.log("Password input detected");
+      }
+    });
+  }
+}
 
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
@@ -24,7 +48,13 @@ function onEvent(debuggeeId, message, params) {
     processRequest(params);
   } else if (message == "Network.responseReceived") {
     processResponse(params);
+  } else if (message == "DOM.documentUpdated") {
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
+      console.log(root.root);
+      chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
+    });
   }
+  
 }
 
 function processRequest(params)
@@ -34,17 +64,13 @@ function processRequest(params)
 
 function processResponse(params)
 {
-  let url = params.response.url;
-  let status = params.response.status;
-  let urlReport = analyse_url(url);
-  report[url] = urlReport;
-  if (urlReport && urlReport.length > 0)
-  {
-    var urlReportLine = document.createElement("div");
-    urlReportLine.textContent = params.response.url + " Report: " + urlReport;
-    document.getElementById("container").appendChild(urlReportLine);
-  }
+  addUrlReport(params.response.url);
+  addStatusReport(params.response.status);
 
+}
+
+function addStatusReport(status)
+{
   if (status >= 300 && status < 400)
   {
     numRedirects++;
@@ -52,6 +78,20 @@ function processResponse(params)
   }
 }
 
+function addUrlReport(url)
+{
+  let urlReport = analyse_url(url);
+  report[url] = urlReport;
+  if (urlReport && urlReport.length > 0)
+  {
+    let pureIpElem = document.getElementById("pureIp");
+    if (pureIpElem.textContent === "No pure IP addresses")
+    {
+      pureIpElem.textContent = "";
+    }
+    pureIpElem.textContent += params.response.url + " Report: " + urlReport + '\n';
+  }
+}
 
 function analyse_url(url)
 {
