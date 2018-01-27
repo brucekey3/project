@@ -1,7 +1,7 @@
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
+let API_KEY = "AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ";
 let tabId = parseInt(window.location.search.substring(1));
 let report = {};
 let numRedirects = 0;
@@ -13,6 +13,44 @@ window.addEventListener("load", function() {
   chrome.debugger.onEvent.addListener(onEvent);
 
 });
+
+function sendSafeBrowsingCheck(url)
+{
+  // How to send Post request + do something with result
+  let xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+      if (this.readyState == 4 && this.status != 420) {
+         // Typical action to be performed when the document is ready:
+
+         let obj = JSON.parse(xhttp.responseText);
+         console.log(obj);
+         if (obj.matches === undefined)
+         {
+           console.log(url + " is safe");
+         }
+         else {
+           console.log(url + " is malicious");
+         }
+      }
+  };
+  xhttp.open("POST", "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + API_KEY);
+  xhttp.setRequestHeader('Content-type', 'application/json');
+  requestBody = {
+    "client": {
+      "clientId":      "HoneyBrowser",
+      "clientVersion": "0.0.1"
+    },
+    "threatInfo": {
+      "threatTypes":      ["MALWARE", "SOCIAL_ENGINEERING"],
+      "platformTypes":    ["LINUX"],
+      "threatEntryTypes": ["URL"],
+      "threatEntries": [
+        {"url": url}
+      ]
+    }
+  };
+  xhttp.send();
+}
 
 window.addEventListener("unload", function() {
   chrome.debugger.detach({tabId:tabId});
@@ -54,12 +92,12 @@ function onEvent(debuggeeId, message, params) {
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
     });
   }
-  
+
 }
 
 function processRequest(params)
 {
-
+  sendSafeBrowsingCheck(params.request.url);
 }
 
 function processResponse(params)
@@ -80,6 +118,11 @@ function addStatusReport(status)
 
 function addUrlReport(url)
 {
+  // Only do the same URL once
+  if (report[url])
+  {
+    return;
+  }
   let urlReport = analyse_url(url);
   report[url] = urlReport;
   if (urlReport && urlReport.length > 0)
@@ -89,22 +132,37 @@ function addUrlReport(url)
     {
       pureIpElem.textContent = "";
     }
-    pureIpElem.textContent += params.response.url + " Report: " + urlReport + '\n';
+    pureIpElem.textContent += url + " Report: " + urlReport + '\n';
   }
 }
 
+let regex = /\d+\.\d+\.\d+\.\d+/;
+let specialCharacters = ['<','>','#','%','{','}','|','\\','^','~','[',']',/*'?'*/, '@'];
 function analyse_url(url)
 {
   let report = "";
   console.log("Matching with: " + url);
-  var ipformat = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-  if (url.match(ipformat))
+
+  if (regex.test(regex))
   {
     console.log("Matches");
     report += "Matches IP address";
   }
   else {
     console.log("Does not match");
+    let found = [];
+    for (let i in specialCharacters)
+    {
+      if (url.indexOf(specialCharacters[i]) !== -1)
+      {
+        console.log("Special character: " + specialCharacters[i] + " found in URL " + url);
+        found.push(specialCharacters[i]);
+      }
+    }
+    if (found.length > 0)
+    {
+      report += "Special characters: " + found.toString();
+    }
   }
   return report;
 }
