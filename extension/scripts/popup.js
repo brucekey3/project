@@ -10,8 +10,15 @@ document.addEventListener('DOMContentLoaded', function () {
   document.getElementById("logHeaders").addEventListener("click", logHeadersClick);
   document.getElementById("pauseExecution").addEventListener("click", pauseExecClick);
   document.getElementById("createReport").addEventListener("click", createReportClick);
+  document.getElementById("runTests").addEventListener("click", runTestsClick);
 });
 
+function runTestsClick(e) {
+  chrome.windows.create(
+     {url: "tests/test.html",
+      type: "popup",
+      width: 800, height: 600});
+}
 
 function logHeadersClick(e) {
   console.log("Log Headers");
