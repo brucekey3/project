@@ -181,7 +181,7 @@ function analyse_url(url)
 
 function isPureIPAddress(testString)
 {
-  let regex = /\d+\.\d+\.\d+\.\d+/;
+  let regex = /^(http:\/\/|https:\/\/|)\d+\.\d+\.\d+\.\d+.*$/;
   return regex.test(testString);
 }
 
