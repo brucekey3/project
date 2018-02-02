@@ -9,21 +9,43 @@ let redirectThreshold = 1;
 
 window.addEventListener("load", function() {
   document.getElementById("clearBtn").addEventListener("click", clear);
+  document.getElementById("reportsToggle").addEventListener("click", toggleHide)
   //clear();
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
   chrome.debugger.onEvent.addListener(onEvent);
+  chrome.tabs.reload(tabId, {bypassCache: true}, null);
+});
+
+window.addEventListener("unload", function() {
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
+  chrome.debugger.detach({tabId:tabId});
 
 });
 
-function clear()
+function toggleHide(e)
+{
+  if (document.getElementById("urlReports").hasAttribute("hidden"))
+  {
+    document.getElementById("urlReports").removeAttribute("hidden");
+  }
+  else {
+    document.getElementById("urlReports").setAttribute("hidden", '');
+  }
+}
+
+function clear(e)
 {
   numRedirects = 0;
   report = {};
   document.getElementById("numRedirects").textContent = "The number of redirects is: 0";
   document.getElementById("passwordPresent").textContent = "There is a password form present";
   document.getElementById("passwordPresent").setAttribute("hidden", '');
-  document.getElementById("urlReports").textContent = "";
+  let node = document.getElementById("urlReports");
+  while (node.hasChildNodes()) {
+    node.removeChild(node.lastChild);
+  }
 }
 
 function sendSafeBrowsingCheck(url)
@@ -31,7 +53,7 @@ function sendSafeBrowsingCheck(url)
   // How to send Post request + do something with result
   let xhttp = new XMLHttpRequest();
   xhttp.onreadystatechange = function() {
-      if (this.readyState == 4 && this.status != 420) {
+      if (this.readyState == 4) {
          // Typical action to be performed when the document is ready:
 
          let obj = JSON.parse(xhttp.responseText);
@@ -64,18 +86,11 @@ function sendSafeBrowsingCheck(url)
   xhttp.send();
 }
 
-window.addEventListener("unload", function() {
-  chrome.debugger.detach({tabId:tabId});
-  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
-
-});
 
 function processInputSelector(nodeIdResults)
 {
   let nodeIds = nodeIdResults.nodeIds;
   // Reset the presence of a password field
-
 
   for (let id in nodeIds)
   {
@@ -122,7 +137,6 @@ function processResponse(params)
 {
   addUrlReport(params.response.url);
   addStatusReport(params.response.status);
-
 }
 
 function addStatusReport(status)
@@ -145,11 +159,14 @@ function addUrlReport(url)
   report[url] = urlReport;
   if (urlReport && urlReport.length > 0)
   {
-    document.getElementById("urlReports").textContent += "\n Report: " + urlReport + " for " + url + '\n';
+    let child = document.createElement("div");
+    child.textContent = "Report: " + urlReport + " for " + url + '\n';
+    child.setAttribute("class", "request");
+    document.getElementById("urlReports").appendChild(child);
   }
 }
 
-let specialCharacters = ['<','>','#','%','{','}','|','\\','^','~','[',']',/*'?'*/, '@'];
+let specialCharacters = ['<','>','#','{','}','|','\\','^','~','[',']',/*'?','%',*/ '@'];
 function analyse_url(url)
 {
   let report = "";
@@ -179,9 +196,9 @@ function analyse_url(url)
   return report;
 }
 
+let regex = /^(http:\/\/|https:\/\/|)\d+\.\d+\.\d+\.\d+.*$/;
 function isPureIPAddress(testString)
 {
-  let regex = /^(http:\/\/|https:\/\/|)\d+\.\d+\.\d+\.\d+.*$/;
   return regex.test(testString);
 }
 
