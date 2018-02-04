@@ -13,6 +13,8 @@ window.addEventListener("load", function() {
   //clear();
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
+
   chrome.debugger.onEvent.addListener(onEvent);
   chrome.tabs.reload(tabId, {bypassCache: true}, null);
 });
@@ -20,12 +22,43 @@ window.addEventListener("load", function() {
 window.addEventListener("unload", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
   chrome.debugger.detach({tabId:tabId});
 
 });
 
-function toggleHide(e)
+function processPerformanceMetrics(result)
 {
+  //console.log("Performance");
+  //console.log(result);
+}
+
+function onEvent(debuggeeId, message, params) {
+  if (tabId != debuggeeId.tabId)
+  {
+    return;
+  }
+
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
+
+  //console.log(message);
+  if (message == "Network.requestWillBeSent") {
+    processRequest(params);
+  } else if (message == "Network.responseReceived") {
+    processResponse(params);
+  } else if (message == "DOM.documentUpdated") {
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
+      //console.log(root.root);
+      chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
+
+    });
+  }
+
+}
+
+function toggleHideEvent(e)
+{
+  toggleHide("urlReports");
   if (document.getElementById("urlReports").hasAttribute("hidden"))
   {
     document.getElementById("urlReports").removeAttribute("hidden");
@@ -34,6 +67,23 @@ function toggleHide(e)
     document.getElementById("urlReports").setAttribute("hidden", '');
   }
 }
+
+function toggleHide(id)
+{
+  $(document.getElementById(id)).toggleClass("down");
+  let element = document.getElementById(id).childNodes[1];
+
+  if (element.hasAttribute("hidden"))
+  {
+    element.removeAttribute("hidden");
+  }
+  else {
+    element.setAttribute("hidden", '');
+  }
+
+
+}
+
 
 function clear(e)
 {
@@ -57,7 +107,7 @@ function sendSafeBrowsingCheck(url)
          // Typical action to be performed when the document is ready:
 
          let obj = JSON.parse(xhttp.responseText);
-         console.log(obj);
+         //console.log(obj);
          if (obj.matches === undefined)
          {
            console.log(url + " is safe");
@@ -95,7 +145,7 @@ function processInputSelector(nodeIdResults)
   for (let id in nodeIds)
   {
     let nodeId = nodeIds[id];
-    console.log(nodeId);
+    //console.log(nodeId);
     document.getElementById("passwordPresent").setAttribute("hidden", '');
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.resolveNode", {"nodeId": nodeId}, function(object)
     {
@@ -110,23 +160,8 @@ function processInputSelector(nodeIdResults)
   }
 }
 
-function onEvent(debuggeeId, message, params) {
-  if (tabId != debuggeeId.tabId)
-    return;
-  console.log(message);
-  if (message == "Network.requestWillBeSent") {
-    processRequest(params);
-  } else if (message == "Network.responseReceived") {
-    processResponse(params);
-  } else if (message == "DOM.documentUpdated") {
-    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
-      console.log(root.root);
-      chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
-    });
-  }
 
-}
 
 function processRequest(params)
 {
@@ -148,6 +183,11 @@ function addStatusReport(status)
   }
 }
 
+function onDivClick(id)
+{
+  document.getElementById(id)
+}
+
 function addUrlReport(url)
 {
   // Only do the same URL once
@@ -159,23 +199,47 @@ function addUrlReport(url)
   report[url] = urlReport;
   if (urlReport && urlReport.length > 0)
   {
-    let child = document.createElement("div");
-    child.textContent = "Report: " + urlReport + " for " + url + '\n';
-    child.setAttribute("class", "request");
-    document.getElementById("urlReports").appendChild(child);
+    let urlReportChild = document.createElement("div");
+    let id = url;
+    urlReportChild.setAttribute("id", id);
+    urlReportChild.addEventListener("click", toggleHide.bind(null, id));
+    urlReportChild.setAttribute("class", "test");
+
+    let content = document.createTextNode( "Report for " + url + ":");
+    urlReportChild.appendChild(content);
+    for (let i in urlReport)
+    {
+      let finding = document.createElement("div");
+      finding.textContent = urlReport[i];
+      urlReportChild.appendChild(finding);
+    }
+    document.getElementById("urlReports").appendChild(urlReportChild);
   }
 }
 
 let specialCharacters = ['<','>','#','{','}','|','\\','^','~','[',']',/*'?','%',*/ '@'];
 function analyse_url(url)
 {
-  let report = "";
+  let report = [];
   console.log("Matching with: " + url);
 
-  if (isPureIPAddress(url))
+  let parser = decomposeUrl(url);
+  console.log("Decomposed:");
+  console.log(parser.protocol); // => "http:"
+  console.log(parser.hostname); // => "example.com" also domain
+  if (parser.port)
   {
-    console.log("Matches");
-    report += "Matches IP address";
+    report.push("Port is: " + parser.port);     // => "3000"
+  }
+  console.log(parser.host);     // => "example.com:3000"
+  console.log(parser.pathname); // => "/pathname/"
+  console.log(parser.search);   // => "?search=test"
+  console.log(parser.hash);     // => "#hash"
+
+  if (isPureIPAddress(parser.hostname))
+  {
+    //console.log("Matches");
+    report.push("Contains pure IP address");
   }
   else {
     console.log("Does not match");
@@ -190,17 +254,13 @@ function analyse_url(url)
     }
     if (found.length > 0)
     {
-      report += "Special characters: " + found.toString();
+      report.push("Special characters: " + found.toString());
     }
   }
   return report;
 }
 
-let regex = /^(http:\/\/|https:\/\/|)\d+\.\d+\.\d+\.\d+.*$/;
-function isPureIPAddress(testString)
-{
-  return regex.test(testString);
-}
+
 
 function parseURL(url) {
   var result = {};

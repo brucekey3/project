@@ -1,0 +1,25 @@
+body {
+  font-family: monospace;
+  word-wrap: break-word;
+}
+
+#container {
+  white-space: pre;
+}
+
+.request {
+  border-top: 1px solid black;
+  margin-bottom: 10px;
+}
+
+.test {
+  border-top: 1px solid black;
+  margin-bottom: 10px;
+}
+
+.test.down:before{
+  content: "\25BC";
+}
+.test:before{
+  content: "\25B2";
+}

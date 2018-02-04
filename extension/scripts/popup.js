@@ -21,6 +21,11 @@ function createReportClick(e)
 
 function sendCreateReportMessage(tabs)
 {
+  if (chrome.runtime.lastError) {
+    alert(chrome.runtime.lastError.message);
+    return;
+  }
+  
   let activeTab = tabs[0];
   console.log("Sending createReportWindow message");
   chrome.runtime.sendMessage({
