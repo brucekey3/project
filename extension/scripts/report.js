@@ -161,7 +161,24 @@ function processInputSelector(nodeIdResults)
 }
 
 
+function getUrlReportDiv(url)
+{
+  let urlReportChild = document.getElementById(url);
+  if (urlReportChild)
+  {
+    return urlReportChild;
+  }
 
+  urlReportChild = document.createElement("div");
+
+  urlReportChild.setAttribute("id", url);
+  urlReportChild.addEventListener("click", toggleHide.bind(null, url));
+  urlReportChild.setAttribute("class", "hidable");
+
+  let content = document.createTextNode( "Report for " + url + ":");
+  urlReportChild.appendChild(content);
+  return urlReportChild;
+}
 
 function processRequest(params)
 {
@@ -170,51 +187,59 @@ function processRequest(params)
 
 function processResponse(params)
 {
-  addUrlReport(params.response.url);
-  addStatusReport(params.response.status);
+  let url = params.response.url;
+  let content = getUrlReportDiv(url);
+  console.log(content);
+  let urlReport = createUrlReport(url);
+  console.log(urlReport);
+  let statusReport = addStatusReport(params.response.status);
+  console.log(statusReport);
+  if (urlReport)
+  {
+    content.appendChild(urlReport);
+  }
+  if (statusReport)
+  {
+    content.appendChild(statusReport);
+  }
 }
 
 function addStatusReport(status)
 {
+  let statusDiv = document.createElement("div");
   if (status >= 300 && status < 400)
   {
     numRedirects++;
     document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+    statusDiv.textContent = "Status " + status + " redirect";
   }
+  else if (status >= 500)
+  {
+    statusDiv.textContent = "Status " + status + " failed to load";
+  }
+  return statusDiv;
 }
 
-function onDivClick(id)
-{
-  document.getElementById(id)
-}
-
-function addUrlReport(url)
+function createUrlReport(url)
 {
   // Only do the same URL once
   if (report[url])
   {
-    return;
+    return null;
   }
   let urlReport = analyse_url(url);
   report[url] = urlReport;
+  let urlReportChild = document.createElement("div");
   if (urlReport && urlReport.length > 0)
   {
-    let urlReportChild = document.createElement("div");
-    let id = url;
-    urlReportChild.setAttribute("id", id);
-    urlReportChild.addEventListener("click", toggleHide.bind(null, id));
-    urlReportChild.setAttribute("class", "test");
-
-    let content = document.createTextNode( "Report for " + url + ":");
-    urlReportChild.appendChild(content);
     for (let i in urlReport)
     {
       let finding = document.createElement("div");
       finding.textContent = urlReport[i];
       urlReportChild.appendChild(finding);
     }
-    document.getElementById("urlReports").appendChild(urlReportChild);
   }
+  return urlReportChild;
 }
 
 let specialCharacters = ['<','>','#','{','}','|','\\','^','~','[',']',/*'?','%',*/ '@'];
