@@ -98,6 +98,26 @@ function clear(e)
   }
 }
 
+function safeCheckCallback(url, result)
+{
+  if (result !== undefined)
+  {
+    // Malicious
+    report[url] = content;
+    let content = getUrlReportDiv(url);
+
+    let safeReport = document.createElement("div");
+    safeReport.textContent = result;
+    content.appendChild(safeReport);
+    let urlReports = document.getElementById("urlReports");
+    if (urlReports.contains(content))
+    {
+      urlReports.removeChild(content);
+    }
+    urlReports.appendChild(content);
+  }
+}
+
 function sendSafeBrowsingCheck(url)
 {
   // How to send Post request + do something with result
@@ -106,15 +126,8 @@ function sendSafeBrowsingCheck(url)
       if (this.readyState == 4) {
          // Typical action to be performed when the document is ready:
 
-         let obj = JSON.parse(xhttp.responseText);
-         //console.log(obj);
-         if (obj.matches === undefined)
-         {
-           console.log(url + " is safe");
-         }
-         else {
-           console.log(url + " is malicious");
-         }
+        let obj = JSON.parse(xhttp.responseText);
+        safeCheckCallback(url, obj.matches);
       }
   };
   xhttp.open("POST", "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + API_KEY);
@@ -154,7 +167,7 @@ function processInputSelector(nodeIdResults)
       if (item.description.indexOf("pass") !== -1)
       {
         document.getElementById("passwordPresent").removeAttribute("hidden");
-        console.log("Password input detected");
+        //console.log("Password input detected");
       }
     });
   }
@@ -182,6 +195,7 @@ function getUrlReportDiv(url)
 
 function processRequest(params)
 {
+  // This involves an async request so can't return a report
   sendSafeBrowsingCheck(params.request.url);
 }
 
@@ -189,18 +203,31 @@ function processResponse(params)
 {
   let url = params.response.url;
   let content = getUrlReportDiv(url);
-  console.log(content);
   let urlReport = createUrlReport(url);
-  console.log(urlReport);
+
   let statusReport = addStatusReport(params.response.status);
-  console.log(statusReport);
-  if (urlReport)
+  let reportToBeDisplayed = false;
+  if (urlReport && urlReport.textContent !== "")
   {
+    reportToBeDisplayed = true;
     content.appendChild(urlReport);
   }
-  if (statusReport)
+  if (statusReport && statusReport.textContent !== "")
   {
+    reportToBeDisplayed = true;
     content.appendChild(statusReport);
+  }
+
+  report[url] = content;
+  if (reportToBeDisplayed)
+  {
+    let urlReports = document.getElementById("urlReports");
+    // Prevent duplicates from being added
+    if (urlReports.contains(content))
+    {
+      urlReports.removeChild(content);
+    }
+    urlReports.appendChild(content);
   }
 }
 
@@ -228,7 +255,7 @@ function createUrlReport(url)
     return null;
   }
   let urlReport = analyse_url(url);
-  report[url] = urlReport;
+
   let urlReportChild = document.createElement("div");
   if (urlReport && urlReport.length > 0)
   {
@@ -242,24 +269,24 @@ function createUrlReport(url)
   return urlReportChild;
 }
 
-let specialCharacters = ['<','>','#','{','}','|','\\','^','~','[',']',/*'?','%',*/ '@'];
+let specialCharacters = ['<','>','#','{','}','|','\\','^','~','[',']',/*'?','%'*/, '@'];
 function analyse_url(url)
 {
   let report = [];
-  console.log("Matching with: " + url);
+  //console.log("Matching with: " + url);
 
   let parser = decomposeUrl(url);
-  console.log("Decomposed:");
-  console.log(parser.protocol); // => "http:"
-  console.log(parser.hostname); // => "example.com" also domain
+  //console.log("Decomposed:");
+  //console.log(parser.protocol); // => "http:"
+  //console.log(parser.hostname); // => "example.com" also domain
   if (parser.port)
   {
     report.push("Port is: " + parser.port);     // => "3000"
   }
-  console.log(parser.host);     // => "example.com:3000"
-  console.log(parser.pathname); // => "/pathname/"
-  console.log(parser.search);   // => "?search=test"
-  console.log(parser.hash);     // => "#hash"
+  //console.log(parser.host);     // => "example.com:3000"
+  //console.log(parser.pathname); // => "/pathname/"
+  //console.log(parser.search);   // => "?search=test"
+  //console.log(parser.hash);     // => "#hash"
 
   if (isPureIPAddress(parser.hostname))
   {
@@ -267,13 +294,13 @@ function analyse_url(url)
     report.push("Contains pure IP address");
   }
   else {
-    console.log("Does not match");
+    //console.log("Does not match");
     let found = [];
     for (let i in specialCharacters)
     {
       if (url.indexOf(specialCharacters[i]) !== -1)
       {
-        console.log("Special character: " + specialCharacters[i] + " found in URL " + url);
+        //console.log("Special character: " + specialCharacters[i] + " found in URL " + url);
         found.push(specialCharacters[i]);
       }
     }
