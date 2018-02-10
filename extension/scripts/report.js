@@ -13,7 +13,8 @@ window.addEventListener("load", function() {
   //clear();
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
+  //chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Security.enable");
 
   chrome.debugger.onEvent.addListener(onEvent);
   chrome.tabs.reload(tabId, {bypassCache: true}, null);
@@ -22,11 +23,15 @@ window.addEventListener("load", function() {
 window.addEventListener("unload", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
+  //chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
   chrome.debugger.detach({tabId:tabId});
 
 });
 
+/*
+*     START OF CALLBACKS
+*/
 function processPerformanceMetrics(result)
 {
   //console.log("Performance");
@@ -53,7 +58,67 @@ function onEvent(debuggeeId, message, params) {
 
     });
   }
+  else if (message == "Security.securityStateChanged") {
+    processSecurityStateChanged(params);
+  }
+  // Note: this may be deprecated
+  else if (message == "Security.certificateError") {
+    processCertificateError(params);
+  }
 
+}
+
+function processCertificateError(params)
+{
+  let id = eventId;
+  let errorType = params.errorType
+  let requestURL = params.requestURL;
+
+  let reportDiv = getUrlReportDiv(requestURL);
+  let urlReports = document.getElementById("urlReports");
+
+  urlReports.appendChild(reportDiv);
+  reportDiv.textContent = "Certificate error: " + errorType;
+  reportDiv.setAttribute("class", "background-color:red");
+}
+
+function processSecurityStateChanged(params)
+{
+  // unknown, neutral, insecure, secure, info
+  let securityState = params.securityState;
+  let schemeIsCryptographic = params.schemeIsCryptographic;
+
+  // securityState, title, summary, description, mixedContentType, certificate
+  let explanations = params.explanations;
+  let insecureContentStatus = params.insecureContentStatus;
+  let summary = params.summary;
+
+  let div = document.getElementById("securityState");
+  // Use this to create new lines
+  let br = document.createElement("br");
+  while (div.hasChildNodes()) {
+    div.removeChild(div.lastChild);
+  }
+  if (securityState !== "unknown")
+  {
+    let state = document.createElement("div");
+    state.textContent = "Security state is: " + securityState;
+    div.appendChild(state);
+    div.appendChild(br);
+  }
+
+  let isCryptographic = undefined;
+  if (schemeIsCryptographic)
+  {
+    isCryptographic = document.createTextNode("Page was loaded securely.");
+  }
+  else {
+    isCryptographic = document.createTextNode("Page was loaded insecurely.");
+  }
+  div.appendChild(isCryptographic);
+  div.appendChild(br);
+  console.log("Security state changed");
+  console.log(params);
 }
 
 function toggleHideEvent(e)
@@ -100,6 +165,8 @@ function clear(e)
 
 function safeCheckCallback(url, result)
 {
+  console.log("Checked: " + url);
+  console.log("Got: " + result);
   if (result !== undefined)
   {
     // Malicious
@@ -117,38 +184,6 @@ function safeCheckCallback(url, result)
     urlReports.appendChild(content);
   }
 }
-
-function sendSafeBrowsingCheck(url)
-{
-  // How to send Post request + do something with result
-  let xhttp = new XMLHttpRequest();
-  xhttp.onreadystatechange = function() {
-      if (this.readyState == 4) {
-         // Typical action to be performed when the document is ready:
-
-        let obj = JSON.parse(xhttp.responseText);
-        safeCheckCallback(url, obj.matches);
-      }
-  };
-  xhttp.open("POST", "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + API_KEY);
-  xhttp.setRequestHeader('Content-type', 'application/json');
-  requestBody = {
-    "client": {
-      "clientId":      "HoneyBrowser",
-      "clientVersion": "0.0.1"
-    },
-    "threatInfo": {
-      "threatTypes":      ["MALWARE", "SOCIAL_ENGINEERING"],
-      "platformTypes":    ["LINUX", "WINDOWS"],
-      "threatEntryTypes": ["URL"],
-      "threatEntries": [
-        {"url": url}
-      ]
-    }
-  };
-  xhttp.send();
-}
-
 
 function processInputSelector(nodeIdResults)
 {
@@ -173,25 +208,45 @@ function processInputSelector(nodeIdResults)
   }
 }
 
+/*
+*     END OF CALLBACKS
+*/
 
-function getUrlReportDiv(url)
+function sendSafeBrowsingCheck(url)
 {
-  let urlReportChild = document.getElementById(url);
-  if (urlReportChild)
+  if (url && url.length == 0)
   {
-    return urlReportChild;
+    console.log("Cannot check empty URL");
+    return;
   }
+  // How to send Post request + do something with result
+  let xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+      if (this.readyState == 4) {
+         // Typical action to be performed when the document is ready:
 
-  urlReportChild = document.createElement("div");
-
-  urlReportChild.setAttribute("id", url);
-  urlReportChild.addEventListener("click", toggleHide.bind(null, url));
-  urlReportChild.setAttribute("class", "hidable");
-
-  let content = document.createTextNode( "Report for " + url + ":");
-  urlReportChild.appendChild(content);
-  return urlReportChild;
+        let obj = JSON.parse(xhttp.responseText);
+        //console.log(xhttp.responseText);
+        safeCheckCallback(url, obj.matches);
+      }
+  };
+  xhttp.open("POST", "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + API_KEY);
+  xhttp.setRequestHeader('Content-Type', 'application/json');
+  requestBody = {
+   "client": {
+     "clientId":      "HoneyBrowser",
+     "clientVersion": "0.0.1"
+   },
+   "threatInfo": {
+     "threatTypes":      ["MALWARE", "SOCIAL_ENGINEERING"],
+     "platformTypes":    ["LINUX", "WINDOWS"],
+     "threatEntryTypes": ["URL"],
+     "threatEntries": [{"url": url}]
+   }
+  };
+  xhttp.send(JSON.stringify(requestBody));
 }
+
 
 function processRequest(params)
 {
@@ -247,6 +302,12 @@ function addStatusReport(status)
   return statusDiv;
 }
 
+/*
+  Create a report for the given URL and return it as a HTML element such as
+  a div.
+  Only runs once per URL so if a new report is needed then report[url] must be
+  cleared.
+*/
 function createUrlReport(url)
 {
   // Only do the same URL once
@@ -269,61 +330,26 @@ function createUrlReport(url)
   return urlReportChild;
 }
 
-let specialCharacters = ['<','>','#','{','}','|','\\','^','~','[',']',/*'?','%'*/, '@'];
-function analyse_url(url)
+/*
+  Return the div which corresponds to the report for the given URL.
+  If one does not exist then it is created and returned, but NOT added
+  to the document.
+*/
+function getUrlReportDiv(url)
 {
-  let report = [];
-  //console.log("Matching with: " + url);
-
-  let parser = decomposeUrl(url);
-  //console.log("Decomposed:");
-  //console.log(parser.protocol); // => "http:"
-  //console.log(parser.hostname); // => "example.com" also domain
-  if (parser.port)
+  let urlReportChild = document.getElementById(url);
+  if (urlReportChild)
   {
-    report.push("Port is: " + parser.port);     // => "3000"
+    return urlReportChild;
   }
-  //console.log(parser.host);     // => "example.com:3000"
-  //console.log(parser.pathname); // => "/pathname/"
-  //console.log(parser.search);   // => "?search=test"
-  //console.log(parser.hash);     // => "#hash"
 
-  if (isPureIPAddress(parser.hostname))
-  {
-    //console.log("Matches");
-    report.push("Contains pure IP address");
-  }
-  else {
-    //console.log("Does not match");
-    let found = [];
-    for (let i in specialCharacters)
-    {
-      if (url.indexOf(specialCharacters[i]) !== -1)
-      {
-        //console.log("Special character: " + specialCharacters[i] + " found in URL " + url);
-        found.push(specialCharacters[i]);
-      }
-    }
-    if (found.length > 0)
-    {
-      report.push("Special characters: " + found.toString());
-    }
-  }
-  return report;
-}
+  urlReportChild = document.createElement("div");
 
+  urlReportChild.setAttribute("id", url);
+  urlReportChild.addEventListener("click", toggleHide.bind(null, url));
+  urlReportChild.setAttribute("class", "hidable");
 
-
-function parseURL(url) {
-  var result = {};
-  var match = url.match(
-      /^([^:]+):\/\/([^\/:]*)(?::([\d]+))?(?:(\/[^#]*)(?:#(.*))?)?$/i);
-  if (!match)
-    return result;
-  result.scheme = match[1].toLowerCase();
-  result.host = match[2];
-  result.port = match[3];
-  result.path = match[4] || "/";
-  result.fragment = match[5];
-  return result;
+  let content = document.createTextNode( "Report for " + url + ":");
+  urlReportChild.appendChild(content);
+  return urlReportChild;
 }
