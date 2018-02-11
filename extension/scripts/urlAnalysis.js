@@ -38,7 +38,7 @@ function analyse_domain(domain)
     // The separator to search for
     let sep = suspiciousSeparators[i];
     // The number of occurances of said separator
-    let occ = domain.split(sep).length;
+    let occ = domain.split(sep).length - 1;
     if (occ > 0)
     {
       foundSeparators.push({separator: sep, count: occ});
@@ -57,7 +57,7 @@ function analyse_domain(domain)
                    + foundSeparators[i].separator + "'"+ '\n';
     }
     reportString += "This may be phishing!";
-    report.push(reportString);
+    report.push(generateReport(reportString, SeverityEnum.MILD));
   }
 
   // Check whether we are connecting to an IP address which has not been
@@ -65,7 +65,7 @@ function analyse_domain(domain)
   if (isPureIPAddress(domain))
   {
     //console.log("Matches");
-    report.push("Contains pure IP address");
+    report.push(generateReport("Contains pure IP address", SeverityEnum.LOW));
   }
 
   return report;
@@ -90,7 +90,7 @@ function analyse_url(url)
 
   if (parser.port)
   {
-    report.push("Port is: " + parser.port);     // => "3000"
+    report.push(generateReport("Port is: " + parser.port, SeverityEnum.LOW));     // => "3000"
   }
   //console.log(parser.host);     // => "example.com:3000"
   //console.log(parser.pathname); // => "/pathname/"
@@ -108,7 +108,7 @@ function analyse_url(url)
   }
   if (found.length > 0)
   {
-    report.push("Special characters: " + found.toString());
+    report.push(generateReport("Special characters: " + found.toString(), SeverityEnum.LOW));
   }
 
   return report;

@@ -13,17 +13,107 @@ window.addEventListener("load", function() {
   //clear();
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
-  //chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.enable");
 
   chrome.debugger.onEvent.addListener(onEvent);
   chrome.tabs.reload(tabId, {bypassCache: true}, null);
+
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.startPreciseCoverage", {callCount: true, detailed: true}, function(){
+      chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
+          window.setTimeout(stop, 10000);
+      });
+  });
+
+  chrome.system.cpu.getInfo(function (res){
+    for (let i in res.processors)
+    {
+      lastUserUsage[i] = res.processors[i].usage.user;
+      lastKernelUsage[i] = res.processors[i].usage.kernel;
+      lastIdleUsage[i] = res.processors[i].usage.idle;
+      lastTotalUsage[i] = res.processors[i].usage.total;
+    }
+    // Give the page some time to load
+    window.setTimeout(monitorCpuUsage.bind(null, 0), 5000)
+  });
 });
+
+let lastUserUsage = [];
+let lastKernelUsage = [];
+let lastIdleUsage = [];
+let lastTotalUsage = [];
+
+function monitorCpuUsage(lastUsage)
+{
+  chrome.system.cpu.getInfo(function (res){
+    console.log(res);
+    let resourcesDiv = document.getElementById("resources");
+    while (resourcesDiv.hasChildNodes()) {
+      resourcesDiv.removeChild(resourcesDiv.lastChild);
+    }
+
+    for (let i in res.processors)
+    {
+      let userUsage = res.processors[i].usage.user
+      let kernelUsage = res.processors[i].usage.kernel
+      let idleUsage = res.processors[i].usage.idle
+      let totalUsage = res.processors[i].usage.total
+
+      let totalUsageDiff  =  totalUsage  - lastTotalUsage[i];
+
+      let userUsagePercentage   = ((userUsage   - lastUserUsage[i])  / totalUsageDiff)*100;
+      let kernelUsagePercentage = ((kernelUsage - lastKernelUsage[i])/ totalUsageDiff)*100;
+      let idleUsagePercentage   = ((idleUsage   - lastIdleUsage[i])  / totalUsageDiff)*100;
+
+      let user   = document.createElement("div");
+      user.textContent = "User usage: " + userUsagePercentage + "%";
+      let kernel = document.createElement("div");
+      kernel.textContent = "Kernel usage: " + kernelUsagePercentage + "%";
+      let idle   = document.createElement("div");
+      idle.textContent = "Idle usage: " + idleUsagePercentage + "%";
+
+      if (userUsagePercentage > 70)
+      {
+        user.style.backgroundColor = "red";
+        let warning = document.createElement("div");
+        warning.style.backgroundColor = "red";
+        warning.textContent = "Warning - high CPU usage. "
+                            + "This site may be mining cryptocurrency.";
+        resourcesDiv.appendChild(warning);
+        resourcesDiv.appendChild(document.createElement("br"));
+      }
+
+      resourcesDiv.appendChild(user);
+      resourcesDiv.appendChild(document.createElement("br"));
+      resourcesDiv.appendChild(kernel);
+      resourcesDiv.appendChild(document.createElement("br"));
+      resourcesDiv.appendChild(idle);
+
+      lastUserUsage[i]   = userUsage;
+      lastKernelUsage[i] = kernelUsage;
+      lastIdleUsage[i]   = idleUsage;
+      lastTotalUsage[i]  = totalUsage;
+    }
+
+    window.setTimeout(monitorCpuUsage.bind(null, 0), 2000)
+  });
+}
+
+function stop()
+{
+  console.log("Stop");
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stop", {}, processProfilerResults)
+}
 
 window.addEventListener("unload", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
-  //chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
   chrome.debugger.detach({tabId:tabId});
 
@@ -35,7 +125,15 @@ window.addEventListener("unload", function() {
 function processPerformanceMetrics(result)
 {
   //console.log("Performance");
-  //console.log(result);
+  //console.dir(result);
+  for (let i in result.metrics)
+  {
+    let metricObj = result.metrics[i];
+    if (metricObj.name === "JSHeapUsedSize")
+    {
+      console.log("JSHeapUsedSize: " + metricObj.value);
+    }
+  }
 }
 
 function onEvent(debuggeeId, message, params) {
@@ -44,7 +142,7 @@ function onEvent(debuggeeId, message, params) {
     return;
   }
 
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
+
 
   //console.log(message);
   if (message == "Network.requestWillBeSent") {
@@ -65,7 +163,20 @@ function onEvent(debuggeeId, message, params) {
   else if (message == "Security.certificateError") {
     processCertificateError(params);
   }
+  else if (message == "Performance.metrics") {
+    processPerformanceMetrics(params);
+  }
+  else if (message == "Profiler.consoleProfileFinished")
+  {
+    processProfilerResults(params);
+  }
 
+}
+
+function processProfilerResults(results)
+{
+  console.log("Profiler");
+  console.dir(results);
 }
 
 function processCertificateError(params)
@@ -117,8 +228,8 @@ function processSecurityStateChanged(params)
   }
   div.appendChild(isCryptographic);
   div.appendChild(br);
-  console.log("Security state changed");
-  console.log(params);
+  //console.log("Security state changed");
+  //console.log(params);
 }
 
 function toggleHideEvent(e)
@@ -165,8 +276,8 @@ function clear(e)
 
 function safeCheckCallback(url, result)
 {
-  console.log("Checked: " + url);
-  console.log("Got: " + result);
+  //console.log("Checked: " + url);
+  //console.log("Got: " + result);
   if (result !== undefined)
   {
     // Malicious
@@ -323,7 +434,8 @@ function createUrlReport(url)
     for (let i in urlReport)
     {
       let finding = document.createElement("div");
-      finding.textContent = urlReport[i];
+      finding.textContent = urlReport[i].text;
+      setSeverityAttributes(finding, urlReport[i].severity);
       urlReportChild.appendChild(finding);
     }
   }
