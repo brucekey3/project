@@ -24,89 +24,35 @@ chrome.webRequest.onBeforeRequest.addListener(
 */
 var version = "1.0";
 
-chrome.browserAction.onClicked.addListener(function(tab) {
-  console.log(tab);
-});
-
-function onAttachOpenWindow(tabId) {
-  if (chrome.runtime.lastError) {
-    alert(chrome.runtime.lastError.message);
-    return;
-  }
-
-  var debuggeeId = {tabId: tabId};
-  console.log("Enabled");
-  chrome.debugger.sendCommand(debuggeeId, "Debugger.enable", {}, null);
-  console.log("Opening Window");
-  chrome.windows.create(
-     {url: "html/headers.html?" + tabId,
-      type: "popup",
-      width: 800, height: 600});
-}
-
-function onAttachPause(tabId) {
-
-  if (chrome.runtime.lastError) {
-    alert(chrome.runtime.lastError.message);
-    return;
-  }
-
-  var debuggeeId = {tabId: tabId};
-  chrome.debugger.sendCommand(debuggeeId, "Debugger.enable", {}, null);
-  console.log("Enabled");
-  chrome.debugger.sendCommand(debuggeeId, "Debugger.pause");
-  console.log("Paused");
-}
-
 function onAttachReport(tabId)
 {
   if (chrome.runtime.lastError) {
     alert(chrome.runtime.lastError.message);
     return;
   }
-
-  attached[tabId] = true;
+  
   chrome.windows.create(
      {url: "html/report.html?" + tabId,
       type: "popup",
       width: 800, height: 600});
 }
 
-let attached = {};
-
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
-    if( request.message === "openWindow" ) {
-      let id = request.data;
-      console.log(request);
-      chrome.debugger.attach({tabId: id}, version,
-          onAttachOpenWindow.bind(null, id)
-      );
-
-    }
-    else if (request.message === "pauseExecution") {
-      let id = request.data;
-      chrome.debugger.attach({tabId: id}, version,
-          onAttachPause.bind(null, id)
-      );
-    }
-    else if (request.message === "createReportWindow") {
+    if (request.message === "createReportWindow") {
       console.log("createReportWindow message received");
 
       let tabId = request.data;
-      var debuggeeId = {tabId: tabId};
+      let debuggeeId = {tabId: tabId};
 
-      if (!attached[tabId])
-      {
-        chrome.debugger.attach(debuggeeId, version,
-            onAttachReport.bind(null, tabId)
-        );
-      }
+      chrome.debugger.attach(debuggeeId,
+                             version,
+                             onAttachReport.bind(null, tabId));
+
 
     }
 
-
-
+    return true;
 });
 
 console.log("background");

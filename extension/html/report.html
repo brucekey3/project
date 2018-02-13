@@ -6,31 +6,30 @@ found in the LICENSE file.
 
 <html>
 <head>
-<style>
-body {
-  font-family: monospace;
-  word-wrap: break-word;
-}
 
-#container {
-  white-space: pre;
-}
+<link rel="stylesheet" type="text/css" href="../css/report.css">
 
-.request {
-  border-top: 1px solid black;
-  margin-bottom: 10px;
-}
-
-</style>
-
+<script src="../jquery-3.2.1.js"></script>
+<script src="../scripts/reportHelper.js"></script>
+<script src="../scripts/urlAnalysis.js"></script>
 <script src="../scripts/report.js"></script>
 </head>
 
 <body>
+<button id="clearBtn">Clear Report</button>
 <div id="container">
+<div id="resources" class="request"></div>
+<div id="securityState" class="request"></div>
+
 <div id="numRedirects" class="request">The number of redirects is: 0</div>
-<div id="pureIp" class="request">No pure IP addresses</div>
 <div id="passwordPresent" class="request" hidden>There is a password form present</div>
 </div>
+
+<h3>URL Reports</h3>
+<button id="reportsToggle"> Hide Report</button>
+
+<div id="urlReports" class="request" >
+</div>
+
 </body>
 </html>
