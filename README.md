@@ -1,6 +1,6 @@
 # project
 
-##Known Issues
+## Known Issues
 System resource usage is not per tab so visiting multiple tabs at the same time means that the system resources will not be specific to the tab the user wishes to investigate.
 
 ## Functionality
