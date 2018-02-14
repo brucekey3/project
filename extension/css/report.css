@@ -23,3 +23,34 @@ body {
 .hidable:before{
   content: "\25B2";
 }
+
+.indented
+ {
+ padding-left: 50pt;
+ padding-right: 50pt;
+ }
+
+ .pathnameContainer:before
+ {
+  padding-left: 50pt;
+  padding-right: 50pt;
+  content: "\25B2";
+ }
+
+ .pathnameContainer.down:before
+ {
+  padding-left: 50pt;
+  padding-right: 50pt;
+  content: "\25BC";
+ }
+
+
+ .domainContainer:before
+ {
+  content: "\25B2";
+ }
+
+ .domainContainer.down:before
+ {
+  content: "\25BC";
+ }
