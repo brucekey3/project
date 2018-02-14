@@ -49,7 +49,7 @@ let lastTotalUsage = [];
 function monitorCpuUsage(lastUsage)
 {
   chrome.system.cpu.getInfo(function (res){
-    console.log(res);
+    //console.log(res);
     let resourcesDiv = document.getElementById("resources");
     while (resourcesDiv.hasChildNodes()) {
       resourcesDiv.removeChild(resourcesDiv.lastChild);
@@ -175,8 +175,8 @@ function onEvent(debuggeeId, message, params) {
 
 function processProfilerResults(results)
 {
-  console.log("Profiler");
-  console.dir(results);
+  //console.log("Profiler");
+  //console.dir(results);
 }
 
 function processCertificateError(params)
