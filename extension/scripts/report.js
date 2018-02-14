@@ -179,12 +179,13 @@ function processProfilerResults(results)
   //console.dir(results);
 }
 
+// TODO: Change this to check if container is present?
 function processCertificateError(params)
 {
   let id = eventId;
   let errorType = params.errorType
   let requestURL = params.requestURL;
-  let reportDiv = getDomainReportDiv(requestURL);
+  let reportObj = getDomainReportContainer(requestURL);
   let urlReports = document.getElementById("urlReports");
 
   urlReports.appendChild(reportDiv);
@@ -280,6 +281,7 @@ function clear(e)
 {
   numRedirects = 0;
   report = {};
+  containers = {};
   document.getElementById("numRedirects").textContent = "The number of redirects is: 0";
   document.getElementById("passwordPresent").textContent = "There is a password form present";
   document.getElementById("passwordPresent").setAttribute("hidden", '');
@@ -297,7 +299,7 @@ function safeCheckCallback(url, result)
   {
     // Malicious
     report[url] = content;
-    let content = getDomainReportDiv(url);
+    let content = getDomainReportContainer(url);
 
     let safeReport = document.createElement("div");
     safeReport.textContent = result;
@@ -383,7 +385,7 @@ function processRequest(params)
 function processResponse(params)
 {
   let url = params.response.url;
-  let content = getDomainReportDiv(url);
+  let content = getDomainReportContainer(url);
   let urlReport = createUrlReport(url);
   // If we have already done this url then null is returned and we should
   // not bother performing any analysis on it
@@ -510,29 +512,28 @@ function createUrlReport(url)
   return urlReport;
 }
 
+let containers = {};
+
 /*
   Return the div which corresponds to the report for the given URL.
   If one does not exist then it is created and returned, but NOT added
   to the document.
 */
-function getDomainReportDiv(url)
+function getDomainReportContainer(url)
 {
   let parser = decomposeUrl(url);
   let domain = parser.hostname;
-  let domainReportChild = document.getElementById(domain);
-  if (domainReportChild)
+
+  // If it already exists then return the existing one
+  let domainReportChildObj = containers[domain]; //document.getElementById(domain);
+  if (domainReportChildObj)
   {
-    return domainReportChild;
+    return domainReportChildObj;
   }
 
-  domainReportChild = document.createElement("div");
+  // If it does not already exist then build a new one
+  domainReportChildObj = new DomainContainer();
+  domainReportChildObj.buildDomainContainer(domain);
 
-  domainReportChild.setAttribute("id", domain);
-  domainReportChild.addEventListener("click", toggleHide.bind(null, domain));
-  domainReportChild.setAttribute("class", "hidable");
-  let wrapper = document.createElement("h1");
-  let content = document.createTextNode( "Report for domain: " + domain + ":");
-  wrapper.appendChild(content);
-  domainReportChild.appendChild(wrapper);
-  return domainReportChild;
+  return domainReportChildObj;
 }

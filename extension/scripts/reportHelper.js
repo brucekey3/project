@@ -78,6 +78,12 @@ class DomainContainer()
     this.domainContainer.setAttribute("class", "domainContainer");
     this.domainContainer.setAttribute("id", domain);
     this.domainContainer.textContent = "Report for domain: " + domain + ":";
+    this.domainContainer.addEventListener("click", toggleHide.bind(null, domain));
+
+    let wrapper = document.createElement("h1");
+    let content = document.createTextNode( "Report for domain: " + domain + ":");
+    wrapper.appendChild(content);
+    this.domainContainer.appendChild(wrapper);
 
     // Create the element which will contain the pathname reports
     let domainChild = document.createElement("span");
