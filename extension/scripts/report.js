@@ -188,9 +188,14 @@ function processCertificateError(params)
   let reportObj = getDomainReportContainer(requestURL);
   let urlReports = document.getElementById("urlReports");
 
-  urlReports.appendChild(reportDiv);
-  reportDiv.textContent = "Certificate error: " + errorType;
-  reportDiv.setAttribute("class", "background-color:red");
+  let report = [].push(generateReport("Certificate error: " + errorType,
+                                      SeverityEnum.SEVERE));
+  reportObj.addDomainReport(report);
+
+  if (urlReports.querySelector("#" + reportObj.domain) == null)
+  {
+    urlReports.appendChild(reportDiv);
+  }
 }
 
 function processSecurityStateChanged(params)
@@ -385,7 +390,6 @@ function processRequest(params)
 function processResponse(params)
 {
   let url = params.response.url;
-  let content = getDomainReportContainer(url);
   let urlReport = createUrlReport(url);
   // If we have already done this url then null is returned and we should
   // not bother performing any analysis on it
@@ -393,24 +397,30 @@ function processResponse(params)
   {
     return;
   }
+  let container = getDomainReportContainer(url);
   let reportToBeDisplayed = false;
 
-  if (urlReport.domain && urlReport.domain.textContent !== "")
+  if (urlReport.domain && urlReport.domain.length > 0)
   {
     reportToBeDisplayed = true;
-    content.appendChild(urlReport.domain);
+    container.addDomainReport(urlReport.domain);
   }
 
+  let parser = decomposeUrl(url);
+  let pathname = parser.pathname;
   // Status report will be per unique URL i.e. combination of domain and path
   let statusReport = addStatusReport(params.response.status);
-  if (statusReport && statusReport.textContent !== "")
+  if (statusReport && statusReport.length > 0)
   {
     reportToBeDisplayed = true;
+    // If we have a report for this pathname then add the status report to that
     if (urlReport.pathname)
     {
-      urlReport.pathname.appendChild(statusReport);
+      urlReport.pathname.push(statusReport);
     }
+    // Otherwise create a report just for the status
     else {
+      /*
       let pathnameReportChild = document.createElement("div");
       pathnameReportChild.setAttribute("id", parser.pathname);
       pathnameReportChild.addEventListener("click", toggleHide.bind(null, parser.pathname));
@@ -418,43 +428,47 @@ function processResponse(params)
       let content = document.createTextNode( "Report for " + parser.pathname + ":");
       pathnameReportChild.appendChild(content);
       urlReport.pathname = statusReport;
+      */
+      container.addPathnameReport(pathname, statusReport);
     }
   }
 
-  if (urlReport.pathname && urlReport.pathname.textContent !== "")
+  if (urlReport.pathname && urlReport.pathname.length > 0)
   {
     reportToBeDisplayed = true;
-    content.appendChild(urlReport.pathname);
+    container.addPathnameReport(pathname, urlReport.pathname);
   }
 
 
-  report[url] = content;
+  report[url] = container;
   if (reportToBeDisplayed)
   {
     let urlReports = document.getElementById("urlReports");
     // Prevent duplicates from being added
-    if (urlReports.contains(content))
+    if (urlReports.contains(container.domainContainer))
     {
-      urlReports.removeChild(content);
+      urlReports.removeChild(container.domainContainer);
     }
-    urlReports.appendChild(content);
+    urlReports.appendChild(container.domainContainer);
   }
 }
 
 function addStatusReport(status)
 {
-  let statusDiv = document.createElement("div");
+  let report = [];
   if (status >= 300 && status < 400)
   {
     numRedirects++;
     document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
-    statusDiv.textContent = "Status " + status + " redirect";
+    report.push(generateReport("Status " + status + " redirect",
+                               SeverityEnum.LOW));
   }
   else if (status >= 500)
   {
-    statusDiv.textContent = "Status " + status + " failed to load";
+    report.push(generateReport("Status " + status + " failed to load",
+                               SeverityEnum.MILD));
   }
-  return statusDiv;
+  return report;
 }
 
 domainReports = {};
@@ -480,34 +494,22 @@ function createUrlReport(url)
   if (!domainReport)
   {
     domainReport = analyse_domain(parser.hostname);
-    let domainReportChild = document.createElement("div");
-    if (domainReport && domainReport.length > 0)
-    {
-      generateChild(domainReportChild, domainReport)
-    }
     domainReports[parser.hostname] = domainReport;
     // Part of the domain but not in the hostname so do this separately
     if (parser.port)
     {
       domainReport.push(generateReport("Port is: " + parser.port, SeverityEnum.LOW));     // => "3000"
     }
-    urlReport["domain"] = domainReportChild;
+    urlReport["domain"] = domainReport;
   }
 
+  // Get the report for the pathname
   let pathnameReport = analyse_pathname(parser.pathname);
-
+  // If the report contains anything then set this in the return object
   if (pathnameReport && pathnameReport.length > 0)
   {
-    let pathnameReportChild = document.createElement("div");
-    pathnameReportChild.setAttribute("id", parser.pathname);
-    pathnameReportChild.addEventListener("click", toggleHide.bind(null, parser.pathname));
-    pathnameReportChild.setAttribute("class", "hidable");
-    let content = document.createTextNode( "Report for " + parser.pathname + ":");
-    pathnameReportChild.appendChild(content);
-    pathnameReportChild = generateChild(pathnameReportChild, pathnameReport);
-    urlReport["pathname"] = pathnameReportChild;
+    urlReport["pathname"] = pathnameReport;
   }
-
 
   return urlReport;
 }

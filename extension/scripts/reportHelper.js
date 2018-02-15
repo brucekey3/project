@@ -52,27 +52,46 @@ function setSeverityAttributes(elem, severity)
 
 }
 
-class PathnameContainer()
+class PathnameContainer
 {
-  container = undefined;
+
+  PathnameContainer()
+  {
+    this.pathnameContainer = undefined;
+    this.pathname = undefined;
+  }
 
   buildPathnameContainer(pathname)
   {
-    this.container = document.createElement("section");
-    this.container.setAttribute("class", "pathnameContainer");
-    this.container.setAttribute("id", pathname);
-    return container;
+    this.pathname = pathname;
+    this.pathnameContainer = document.createElement("section");
+    this.pathnameContainer.setAttribute("class", "pathnameContainer");
+    this.pathnameContainer.setAttribute("id", pathname);
+    return this.pathnameContainer;
+  }
+
+  addPathnameReport(report)
+  {
+
   }
 }
 
-class DomainContainer()
+class DomainContainer
 {
-  // Defaults
-  domain: undefined;
-  domainContainer: undefined;
+
+
+  DomainContainer()
+  {
+    // Defaults
+    this.domain = undefined;
+    this.domainContainer = undefined;
+  }
 
   buildDomainContainer(domain)
   {
+    // Set the domain of this class
+    this.domain = domain;
+
     // Create the container for the domain report
     this.domainContainer = document.createElement("section");
     this.domainContainer.setAttribute("class", "domainContainer");
@@ -92,7 +111,7 @@ class DomainContainer()
 
     // Create the element which will contain the pathname reports
     let pathnameChild = document.createElement("span");
-    pathnameChild.setAttribute("id", domain + "_pathnames");
+    pathnameChild.setAttribute("id", this.domain + "pathnames");
     this.domainContainer.appendChild(pathnameChild)
 
     return this.domainContainer;
@@ -111,7 +130,7 @@ class DomainContainer()
 
   addPathnameReport(pathname, pathnameReport)
   {
-    if (!domainContainer)
+    if (!this.domainContainer || !this.domain)
     {
       console.log("Build container before adding pathnames");
       return;
@@ -120,8 +139,16 @@ class DomainContainer()
     let pathnameContainerObj = new PathnameContainer();
     pathnameContainerObj.buildPathnameContainer(pathname);
     pathnameContainerObj.addPathnameReport(pathnameReport);
-    document.getElementById(domain + "_pathnames")
-            .appendChild(pathnameContainerObj.pathnameContainer);
+    let pathnamesContainer = this.domainContainer.querySelector("#" + this.domain + "pathnames");
+    if (!pathnamesContainer)
+    {
+      console.log("Could not find pathnames container");
+      console.log(pathname);
+      console.log(this.domainContainer);
+      return;
+    }
+    pathnamesContainer.appendChild(pathnameContainerObj.pathnameContainer);
+
   }
 
 }
