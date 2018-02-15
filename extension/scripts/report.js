@@ -303,18 +303,12 @@ function safeCheckCallback(url, result)
   if (result !== undefined)
   {
     // Malicious
-    report[url] = content;
-    let content = getDomainReportContainer(url);
+    let containerObject = getDomainReportContainer(url);
 
-    let safeReport = document.createElement("div");
-    safeReport.textContent = result;
-    content.appendChild(safeReport);
-    let urlReports = document.getElementById("urlReports");
-    if (urlReports.contains(content))
-    {
-      urlReports.removeChild(content);
-    }
-    urlReports.appendChild(content);
+    let parser = decomposeUrl(url);
+    containerObject.addPathnameReport(parser.pathname, safeReport);
+
+    report[url] = containerObject;
   }
 }
 
@@ -391,6 +385,7 @@ function processResponse(params)
 {
   let url = params.response.url;
   let urlReport = createUrlReport(url);
+
   // If we have already done this url then null is returned and we should
   // not bother performing any analysis on it
   if (!urlReport)
@@ -402,6 +397,9 @@ function processResponse(params)
 
   if (urlReport.domain && urlReport.domain.length > 0)
   {
+    //console.log("Url: " + url);
+    //console.dir(urlReport.domain);
+    //console.log("");
     reportToBeDisplayed = true;
     container.addDomainReport(urlReport.domain);
   }
@@ -435,12 +433,16 @@ function processResponse(params)
 
   if (urlReport.pathname && urlReport.pathname.length > 0)
   {
+    //console.log("Url22: " + url);
+    //console.dir(urlReport.pathname);
+    //console.log("");
     reportToBeDisplayed = true;
     container.addPathnameReport(pathname, urlReport.pathname);
   }
 
 
   report[url] = container;
+  /*
   if (reportToBeDisplayed)
   {
     let urlReports = document.getElementById("urlReports");
@@ -451,6 +453,7 @@ function processResponse(params)
     }
     urlReports.appendChild(container.domainContainer);
   }
+  */
 }
 
 function addStatusReport(status)
@@ -487,7 +490,10 @@ function createUrlReport(url)
     return null;
   }
 
-  let urlReport = {};
+  let urlReport = {
+    domain: [],
+    pathname: []
+  };
   let parser = decomposeUrl(url);
   let domainReport = domainReports[parser.hostname];
   // If we haven't looked at this domain before then analyse it
@@ -500,7 +506,13 @@ function createUrlReport(url)
     {
       domainReport.push(generateReport("Port is: " + parser.port, SeverityEnum.LOW));     // => "3000"
     }
-    urlReport["domain"] = domainReport;
+
+    if (domainReport && domainReport.length > 0)
+    {
+      urlReport.domain = urlReport.domain.concat(domainReport);
+      //console.log("domain!!!!");
+      //console.log(urlReport);
+    }
   }
 
   // Get the report for the pathname
@@ -508,9 +520,11 @@ function createUrlReport(url)
   // If the report contains anything then set this in the return object
   if (pathnameReport && pathnameReport.length > 0)
   {
-    urlReport["pathname"] = pathnameReport;
+    urlReport.pathname = urlReport.pathname.concat(pathnameReport);
+    //console.log("pathname!!!!");
+    //console.log(urlReport);
   }
-
+  report[url] = urlReport;
   return urlReport;
 }
 

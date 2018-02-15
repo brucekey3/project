@@ -12,7 +12,7 @@ function generateReport(text, severity)
   return {text: text, severity: severity};
 }
 
-function generateChild(parent, report)
+function generateChildren(parent, report)
 {
   for (let i in report)
   {
@@ -52,6 +52,7 @@ function setSeverityAttributes(elem, severity)
 
 }
 
+
 class PathnameContainer
 {
 
@@ -72,13 +73,14 @@ class PathnameContainer
 
   addPathnameReport(report)
   {
-
+    let description = document.createTextNode("Report for " + this.pathname + ":");
+    this.pathnameContainer.appendChild(description);
+    this.pathnameContainer = generateChildren(this.pathnameContainer, report);
   }
 }
 
 class DomainContainer
 {
-
 
   DomainContainer()
   {
@@ -106,26 +108,38 @@ class DomainContainer
 
     // Create the element which will contain the pathname reports
     let domainChild = document.createElement("span");
-    domainChild.setAttribute("id", domain + "_report");
+    domainChild.setAttribute("id", "report_" + domain);
     this.domainContainer.appendChild(domainChild)
 
     // Create the element which will contain the pathname reports
     let pathnameChild = document.createElement("span");
-    pathnameChild.setAttribute("id", this.domain + "pathnames");
+    pathnameChild.setAttribute("id", "pathnames" + this.domain);
     this.domainContainer.appendChild(pathnameChild)
 
     return this.domainContainer;
   }
 
-  addDomainReport(report)
+  addDomainReport(domainReport)
   {
-    if (!report || report.length === 0)
+    if (!domainReport || domainReport.length === 0)
     {
       return;
     }
+    else if (domainReport && domainReport.length == 0)
+    {
+      console.log("Empty domain report");
+      return;
+    }
 
-    let reportContainer = document.getElementById(domain + "_report");
-    reportContainer = generateChild(reportContainer, report);
+    let urlReports = document.getElementById("urlReports");
+    let documentDomainContainer = document.getElementById(this.domain);
+    if (!documentDomainContainer)
+    {
+      urlReports.appendChild(this.domainContainer);
+    }
+
+    let reportContainer = document.getElementById("report_" + domain);
+    reportContainer = generateChildren(reportContainer, report);
   }
 
   addPathnameReport(pathname, pathnameReport)
@@ -135,11 +149,23 @@ class DomainContainer
       console.log("Build container before adding pathnames");
       return;
     }
+    else if (pathnameReport && pathnameReport.length == 0)
+    {
+      console.log("Empty pathname report");
+      return;
+    }
+
+    let urlReports = document.getElementById("urlReports");
+    let documentDomainContainer = document.getElementById(this.domain);
+    if (!documentDomainContainer)
+    {
+      urlReports.appendChild(this.domainContainer);
+    }
 
     let pathnameContainerObj = new PathnameContainer();
     pathnameContainerObj.buildPathnameContainer(pathname);
     pathnameContainerObj.addPathnameReport(pathnameReport);
-    let pathnamesContainer = this.domainContainer.querySelector("#" + this.domain + "pathnames");
+    let pathnamesContainer = document.getElementById("pathnames" + this.domain);
     if (!pathnamesContainer)
     {
       console.log("Could not find pathnames container");
