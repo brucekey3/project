@@ -68,6 +68,14 @@ class PathnameContainer
     this.pathnameContainer = document.createElement("section");
     this.pathnameContainer.setAttribute("class", "pathnameContainer");
     this.pathnameContainer.setAttribute("id", pathname);
+
+    let description = document.createElement("span");
+    description.setAttribute("id", pathname + "description")
+    description.setAttribute("class", "hidable");
+    description.addEventListener("click", toggleHide.bind(null, pathname));
+    description.textContent = "Report for pathname: " + pathname + ":";
+    this.pathnameContainer.appendChild(description);
+
     return this.pathnameContainer;
   }
 
@@ -98,8 +106,14 @@ class DomainContainer
     this.domainContainer = document.createElement("section");
     this.domainContainer.setAttribute("class", "domainContainer");
     this.domainContainer.setAttribute("id", domain);
-    this.domainContainer.textContent = "Report for domain: " + domain + ":";
-    this.domainContainer.addEventListener("click", toggleHide.bind(null, domain));
+
+    let description = document.createElement("span");
+    description.setAttribute("id", domain + "description")
+    description.setAttribute("class", "hidable");
+    description.addEventListener("click", toggleHide.bind(null, domain));
+    description.textContent = "Report for domain: " + domain + ":";
+    this.domainContainer.appendChild(description);
+
 
     let wrapper = document.createElement("h1");
     let content = document.createTextNode( "Report for domain: " + domain + ":");
