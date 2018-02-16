@@ -65,24 +65,23 @@ class PathnameContainer
   buildPathnameContainer(pathname)
   {
     this.pathname = pathname;
-    this.pathnameContainer = document.createElement("section");
+    this.pathnameContainer = document.createElement("div");
     this.pathnameContainer.setAttribute("class", "pathnameContainer");
     this.pathnameContainer.setAttribute("id", pathname);
 
-    let description = document.createElement("span");
-    description.setAttribute("id", pathname + "description")
-    description.setAttribute("class", "hidable");
-    description.addEventListener("click", toggleHide.bind(null, pathname));
-    description.textContent = "Report for pathname: " + pathname + ":";
-    this.pathnameContainer.appendChild(description);
+    let descriptionWrapper = document.createElement("h3");
+    descriptionWrapper.setAttribute("id", pathname + "description")
+    //descriptionWrapper.setAttribute("class", "hidable");
+    //descriptionWrapper.addEventListener("click", toggleHide.bind(null, pathname));
+    let description = document.createTextNode("Report for pathname: " + pathname + ":");
+    descriptionWrapper.appendChild(description);
+    this.pathnameContainer.appendChild(descriptionWrapper);
 
     return this.pathnameContainer;
   }
 
   addPathnameReport(report)
   {
-    let description = document.createTextNode("Report for " + this.pathname + ":");
-    this.pathnameContainer.appendChild(description);
     this.pathnameContainer = generateChildren(this.pathnameContainer, report);
   }
 }
@@ -107,18 +106,14 @@ class DomainContainer
     this.domainContainer.setAttribute("class", "domainContainer");
     this.domainContainer.setAttribute("id", domain);
 
-    let description = document.createElement("span");
-    description.setAttribute("id", domain + "description")
-    description.setAttribute("class", "hidable");
-    description.addEventListener("click", toggleHide.bind(null, domain));
-    description.textContent = "Report for domain: " + domain + ":";
-    this.domainContainer.appendChild(description);
-
-
-    let wrapper = document.createElement("h1");
-    let content = document.createTextNode( "Report for domain: " + domain + ":");
-    wrapper.appendChild(content);
-    this.domainContainer.appendChild(wrapper);
+    // Create the element to hold the description
+    let descriptionWrapper = document.createElement("h1");
+    descriptionWrapper.setAttribute("id", domain + "description")
+    //descriptionWrapper.setAttribute("class", "hidable");
+    //descriptionWrapper.addEventListener("click", toggleHide.bind(null, domain));
+    let description = document.createTextNode( "Report for domain: " + domain + ":");
+    descriptionWrapper.appendChild(description);
+    this.domainContainer.appendChild(descriptionWrapper);
 
     // Create the element which will contain the pathname reports
     let domainChild = document.createElement("span");
@@ -135,7 +130,7 @@ class DomainContainer
 
   addDomainReport(domainReport)
   {
-    if (!domainReport || domainReport.length === 0)
+    if (!domainReport)
     {
       return;
     }
@@ -144,7 +139,8 @@ class DomainContainer
       console.log("Empty domain report");
       return;
     }
-
+    console.log("domainReport");
+    console.log(domainReport);
     let urlReports = document.getElementById("urlReports");
     let documentDomainContainer = document.getElementById(this.domain);
     if (!documentDomainContainer)
@@ -152,8 +148,8 @@ class DomainContainer
       urlReports.appendChild(this.domainContainer);
     }
 
-    let reportContainer = document.getElementById("report_" + domain);
-    reportContainer = generateChildren(reportContainer, report);
+    let reportContainer = document.getElementById("report_" + this.domain);
+    reportContainer = generateChildren(reportContainer, domainReport);
   }
 
   addPathnameReport(pathname, pathnameReport)
@@ -168,6 +164,9 @@ class DomainContainer
       console.log("Empty pathname report");
       return;
     }
+
+    console.log("pathnameReport");
+    console.log(pathnameReport);
 
     let urlReports = document.getElementById("urlReports");
     let documentDomainContainer = document.getElementById(this.domain);
@@ -188,6 +187,7 @@ class DomainContainer
       return;
     }
     pathnamesContainer.appendChild(pathnameContainerObj.pathnameContainer);
+    pathnamesContainer.appendChild(document.createElement("br"));
 
   }
 

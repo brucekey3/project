@@ -30,27 +30,12 @@ body {
  padding-right: 50pt;
  }
 
- .pathnameContainer:before
+ .pathnameContainer
  {
-  padding-left: 50pt;
-  padding-right: 50pt;
-  content: "\25B2";
+  border-style: solid;
+  border-radius: 16px;
  }
 
- .pathnameContainer.down:before
+ .domainContainer
  {
-  padding-left: 50pt;
-  padding-right: 50pt;
-  content: "\25BC";
- }
-
-
- .domainContainer:before
- {
-  content: "\25B2";
- }
-
- .domainContainer.down:before
- {
-  content: "\25BC";
  }
