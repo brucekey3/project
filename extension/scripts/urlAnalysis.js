@@ -71,6 +71,36 @@ function analyse_domain(domain)
   return report;
 }
 
+function analyse_pathname(pathname)
+{
+  let report = [];
+  //console.log("Matching with: " + url);
+
+  //console.log("Decomposed:");
+  //console.log(parser.protocol); // => "http:"
+  //console.log(parser.hostname); // => "example.com" also domain
+  //console.log("Host is: " + parser.host);     // => "example.com:3000"
+  //console.log("Pathname: " + parser.pathname); // => "/pathname/"
+  //console.log(parser.search);   // => "?search=test"
+  //console.log(parser.hash);     // => "#hash"
+
+  let found = [];
+  for (let i in specialCharacters)
+  {
+    if (pathname.indexOf(specialCharacters[i]) !== -1)
+    {
+      //console.log("Special character: " + specialCharacters[i] + " found in URL " + url);
+      found.push(specialCharacters[i]);
+    }
+  }
+  if (found.length > 0)
+  {
+    report.push(generateReport("Special characters: " + found.toString(), SeverityEnum.LOW));
+  }
+
+  return report;
+}
+
 /*
   Analyses the url given by decomposing it and checking the parts for ports
   pure IP addresses and special characters
@@ -92,8 +122,8 @@ function analyse_url(url)
   {
     report.push(generateReport("Port is: " + parser.port, SeverityEnum.LOW));     // => "3000"
   }
-  //console.log(parser.host);     // => "example.com:3000"
-  //console.log(parser.pathname); // => "/pathname/"
+  //console.log("Host is: " + parser.host);     // => "example.com:3000"
+  //console.log("Pathname: " + parser.pathname); // => "/pathname/"
   //console.log(parser.search);   // => "?search=test"
   //console.log(parser.hash);     // => "#hash"
 

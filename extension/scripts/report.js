@@ -179,18 +179,23 @@ function processProfilerResults(results)
   //console.dir(results);
 }
 
+// TODO: Change this to check if container is present?
 function processCertificateError(params)
 {
   let id = eventId;
   let errorType = params.errorType
   let requestURL = params.requestURL;
-
-  let reportDiv = getUrlReportDiv(requestURL);
+  let reportObj = getDomainReportContainer(requestURL);
   let urlReports = document.getElementById("urlReports");
 
-  urlReports.appendChild(reportDiv);
-  reportDiv.textContent = "Certificate error: " + errorType;
-  reportDiv.setAttribute("class", "background-color:red");
+  let report = [].push(generateReport("Certificate error: " + errorType,
+                                      SeverityEnum.SEVERE));
+  reportObj.addDomainReport(report);
+
+  if (urlReports.querySelector("#" + reportObj.domain) == null)
+  {
+    urlReports.appendChild(reportDiv);
+  }
 }
 
 function processSecurityStateChanged(params)
@@ -206,28 +211,44 @@ function processSecurityStateChanged(params)
 
   let div = document.getElementById("securityState");
   // Use this to create new lines
-  let br = document.createElement("br");
   while (div.hasChildNodes()) {
     div.removeChild(div.lastChild);
   }
   if (securityState !== "unknown")
   {
-    let state = document.createElement("div");
+    let state = document.createElement("span");
     state.textContent = "Security state is: " + securityState;
+    switch (securityState)
+    {
+      case "neutral":
+        setSeverityAttributes(state, SeverityEnum.MILD);
+        break;
+      case "insecure":
+        setSeverityAttributes(state, SeverityEnum.HIGH);
+        break;
+      case "secure":
+        break;
+      case "info":
+        break;
+      default:
+        break;
+    }
     div.appendChild(state);
-    div.appendChild(br);
+    div.appendChild(document.createElement("br"));
   }
 
-  let isCryptographic = undefined;
+  let isCryptographic = document.createElement("span");
   if (schemeIsCryptographic)
   {
-    isCryptographic = document.createTextNode("Page was loaded securely.");
+    isCryptographic.textContent = "Page was loaded securely.";
   }
-  else {
-    isCryptographic = document.createTextNode("Page was loaded insecurely.");
+  else
+  {
+    isCryptographic.textContent = "Page was loaded insecurely.";
+    setSeverityAttributes(isCryptographic, SeverityEnum.HIGH);
   }
   div.appendChild(isCryptographic);
-  div.appendChild(br);
+  div.appendChild(document.createElement("br"));
   //console.log("Security state changed");
   //console.log(params);
 }
@@ -265,6 +286,7 @@ function clear(e)
 {
   numRedirects = 0;
   report = {};
+  containers = {};
   document.getElementById("numRedirects").textContent = "The number of redirects is: 0";
   document.getElementById("passwordPresent").textContent = "There is a password form present";
   document.getElementById("passwordPresent").setAttribute("hidden", '');
@@ -281,18 +303,12 @@ function safeCheckCallback(url, result)
   if (result !== undefined)
   {
     // Malicious
-    report[url] = content;
-    let content = getUrlReportDiv(url);
+    let containerObject = getDomainReportContainer(url);
 
-    let safeReport = document.createElement("div");
-    safeReport.textContent = result;
-    content.appendChild(safeReport);
-    let urlReports = document.getElementById("urlReports");
-    if (urlReports.contains(content))
-    {
-      urlReports.removeChild(content);
-    }
-    urlReports.appendChild(content);
+    let parser = decomposeUrl(url);
+    containerObject.addPathnameReport(parser.pathname, safeReport);
+
+    report[url] = containerObject;
   }
 }
 
@@ -368,50 +384,88 @@ function processRequest(params)
 function processResponse(params)
 {
   let url = params.response.url;
-  let content = getUrlReportDiv(url);
   let urlReport = createUrlReport(url);
 
-  let statusReport = addStatusReport(params.response.status);
-  let reportToBeDisplayed = false;
-  if (urlReport && urlReport.textContent !== "")
+  // If we have already done this url then null is returned and we should
+  // not bother performing any analysis on it
+  if (!urlReport)
   {
-    reportToBeDisplayed = true;
-    content.appendChild(urlReport);
+    return;
   }
-  if (statusReport && statusReport.textContent !== "")
+  let container = getDomainReportContainer(url);
+  let reportToBeDisplayed = false;
+
+  if (urlReport.domain && urlReport.domain.length > 0)
   {
+    //console.log("Url: " + url);
+    //console.dir(urlReport.domain);
+    //console.log("");
     reportToBeDisplayed = true;
-    content.appendChild(statusReport);
+    container.addDomainReport(urlReport.domain);
   }
 
-  report[url] = content;
+  let parser = decomposeUrl(url);
+  let pathname = parser.pathname;
+  // Status report will be per unique URL i.e. combination of domain and path
+  let statusReport = addStatusReport(params.response.status);
+  if (statusReport && statusReport.length > 0)
+  {
+    reportToBeDisplayed = true;
+    // If we have a report for this pathname then add the status report to that
+    if (urlReport.pathname)
+    {
+      urlReport.pathname = urlReport.pathname.concat(statusReport);
+    }
+    // Otherwise create a report just for the status
+    else {
+      container.addPathnameReport(pathname, statusReport);
+    }
+  }
+
+  if (urlReport.pathname && urlReport.pathname.length > 0)
+  {
+    //console.log("Url22: " + url);
+    //console.dir(urlReport.pathname);
+    //console.log("");
+    reportToBeDisplayed = true;
+    container.addPathnameReport(pathname, urlReport.pathname);
+  }
+
+
+  report[url] = container;
+  /*
   if (reportToBeDisplayed)
   {
     let urlReports = document.getElementById("urlReports");
     // Prevent duplicates from being added
-    if (urlReports.contains(content))
+    if (urlReports.contains(container.domainContainer))
     {
-      urlReports.removeChild(content);
+      urlReports.removeChild(container.domainContainer);
     }
-    urlReports.appendChild(content);
+    urlReports.appendChild(container.domainContainer);
   }
+  */
 }
 
 function addStatusReport(status)
 {
-  let statusDiv = document.createElement("div");
+  let report = [];
   if (status >= 300 && status < 400)
   {
     numRedirects++;
     document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
-    statusDiv.textContent = "Status " + status + " redirect";
+    report.push(generateReport("Status " + status + " redirect",
+                               SeverityEnum.LOW));
   }
   else if (status >= 500)
   {
-    statusDiv.textContent = "Status " + status + " failed to load";
+    report.push(generateReport("Status " + status + " failed to load",
+                               SeverityEnum.MILD));
   }
-  return statusDiv;
+  return report;
 }
+
+domainReports = {};
 
 /*
   Create a report for the given URL and return it as a HTML element such as
@@ -426,42 +480,67 @@ function createUrlReport(url)
   {
     return null;
   }
-  let urlReport = analyse_url(url);
 
-  let urlReportChild = document.createElement("div");
-  if (urlReport && urlReport.length > 0)
+  let urlReport = {
+    domain: [],
+    pathname: []
+  };
+  let parser = decomposeUrl(url);
+  let domainReport = domainReports[parser.hostname];
+  // If we haven't looked at this domain before then analyse it
+  if (!domainReport)
   {
-    for (let i in urlReport)
+    domainReport = analyse_domain(parser.hostname);
+    domainReports[parser.hostname] = domainReport;
+    // Part of the domain but not in the hostname so do this separately
+    if (parser.port)
     {
-      let finding = document.createElement("div");
-      finding.textContent = urlReport[i].text;
-      setSeverityAttributes(finding, urlReport[i].severity);
-      urlReportChild.appendChild(finding);
+      domainReport.push(generateReport("Port is: " + parser.port, SeverityEnum.LOW));     // => "3000"
+    }
+
+    if (domainReport && domainReport.length > 0)
+    {
+      urlReport.domain = urlReport.domain.concat(domainReport);
+      //console.log("domain!!!!");
+      //console.log(urlReport);
     }
   }
-  return urlReportChild;
+
+  // Get the report for the pathname
+  let pathnameReport = analyse_pathname(parser.pathname);
+  // If the report contains anything then set this in the return object
+  if (pathnameReport && pathnameReport.length > 0)
+  {
+    urlReport.pathname = urlReport.pathname.concat(pathnameReport);
+    //console.log("pathname!!!!");
+    //console.log(urlReport);
+  }
+  report[url] = urlReport;
+  return urlReport;
 }
+
+let containers = {};
 
 /*
   Return the div which corresponds to the report for the given URL.
   If one does not exist then it is created and returned, but NOT added
   to the document.
 */
-function getUrlReportDiv(url)
+function getDomainReportContainer(url)
 {
-  let urlReportChild = document.getElementById(url);
-  if (urlReportChild)
+  let parser = decomposeUrl(url);
+  let domain = parser.hostname;
+
+  // If it already exists then return the existing one
+  let domainReportChildObj = containers[domain]; //document.getElementById(domain);
+  if (domainReportChildObj)
   {
-    return urlReportChild;
+    return domainReportChildObj;
   }
 
-  urlReportChild = document.createElement("div");
+  // If it does not already exist then build a new one
+  domainReportChildObj = new DomainContainer();
+  domainReportChildObj.buildDomainContainer(domain);
 
-  urlReportChild.setAttribute("id", url);
-  urlReportChild.addEventListener("click", toggleHide.bind(null, url));
-  urlReportChild.setAttribute("class", "hidable");
-
-  let content = document.createTextNode( "Report for " + url + ":");
-  urlReportChild.appendChild(content);
-  return urlReportChild;
+  return domainReportChildObj;
 }
