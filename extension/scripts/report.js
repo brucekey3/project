@@ -414,19 +414,10 @@ function processResponse(params)
     // If we have a report for this pathname then add the status report to that
     if (urlReport.pathname)
     {
-      urlReport.pathname.push(statusReport);
+      urlReport.pathname = urlReport.pathname.concat(statusReport);
     }
     // Otherwise create a report just for the status
     else {
-      /*
-      let pathnameReportChild = document.createElement("div");
-      pathnameReportChild.setAttribute("id", parser.pathname);
-      pathnameReportChild.addEventListener("click", toggleHide.bind(null, parser.pathname));
-      pathnameReportChild.setAttribute("class", "hidable");
-      let content = document.createTextNode( "Report for " + parser.pathname + ":");
-      pathnameReportChild.appendChild(content);
-      urlReport.pathname = statusReport;
-      */
       container.addPathnameReport(pathname, statusReport);
     }
   }
