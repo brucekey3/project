@@ -28,6 +28,8 @@ window.addEventListener("load", function() {
       });
   });
 
+  chrome.downloads.onCreated.addListener(downloadCreatedCallback);
+
   chrome.system.cpu.getInfo(function (res){
     for (let i in res.processors)
     {
@@ -122,6 +124,14 @@ window.addEventListener("unload", function() {
 /*
 *     START OF CALLBACKS
 */
+
+// Called when a download starts
+function downloadCreatedCallback(downloadItem)
+{
+  alert("Download is starting!!");
+  console.dir(downloadItem);
+}
+
 function processPerformanceMetrics(result)
 {
   //console.log("Performance");

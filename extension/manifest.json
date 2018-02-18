@@ -27,6 +27,7 @@
     "tabs",
     "debugger",
     "system",
-    "system.cpu"
+    "system.cpu",
+    "downloads"
   ]
 }
