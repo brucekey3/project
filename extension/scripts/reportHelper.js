@@ -165,8 +165,8 @@ class DomainContainer
       return;
     }
 
-    console.log("pathnameReport");
-    console.log(pathnameReport);
+    //console.log("pathnameReport");
+    //console.log(pathnameReport);
 
     let urlReports = document.getElementById("urlReports");
     let documentDomainContainer = document.getElementById(this.domain);

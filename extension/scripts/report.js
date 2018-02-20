@@ -17,6 +17,7 @@ window.addEventListener("load", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.enable");
 
+
   chrome.debugger.onEvent.addListener(onEvent);
   chrome.tabs.reload(tabId, {bypassCache: true}, null);
 
@@ -41,6 +42,19 @@ window.addEventListener("load", function() {
     // Give the page some time to load
     window.setTimeout(monitorCpuUsage.bind(null, 0), 5000)
   });
+
+
+});
+
+window.addEventListener("unload", function() {
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
+  chrome.debugger.detach({tabId:tabId});
+
 });
 
 let lastUserUsage = [];
@@ -110,16 +124,6 @@ function stop()
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stop", {}, processProfilerResults)
 }
 
-window.addEventListener("unload", function() {
-  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
-  chrome.debugger.detach({tabId:tabId});
-
-});
 
 /*
 *     START OF CALLBACKS
@@ -146,13 +150,29 @@ function processPerformanceMetrics(result)
   }
 }
 
+function sendStaticAnalysisMessage()
+{
+  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    console.log(tabId);
+    console.log(tabs[0].id);
+    chrome.tabs.sendMessage(tabId, {request: "static_analysis"}, {}, function(response) {
+      console.dir(response);
+      if (response && response.analysis)
+      {
+        let analysis = response.analysis;
+        if (analysis.install && analysis.install > 0){
+          console.log("This page may install an extension");
+        }
+      }
+    });
+  });
+}
+
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
     return;
   }
-
-
 
   //console.log(message);
   if (message == "Network.requestWillBeSent") {
@@ -162,6 +182,7 @@ function onEvent(debuggeeId, message, params) {
   } else if (message == "DOM.documentUpdated") {
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
       //console.log(root.root);
+      sendStaticAnalysisMessage();
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
     });
@@ -201,11 +222,8 @@ function processCertificateError(params)
   let report = [].push(generateReport("Certificate error: " + errorType,
                                       SeverityEnum.SEVERE));
   reportObj.addDomainReport(report);
-
-  if (urlReports.querySelector("#" + reportObj.domain) == null)
-  {
-    urlReports.appendChild(reportDiv);
-  }
+  console.log("CERTIFICATE ERROR");
+  alert("certificate error");
 }
 
 function processSecurityStateChanged(params)
@@ -290,7 +308,6 @@ function toggleHide(id)
 
 
 }
-
 
 function clear(e)
 {
