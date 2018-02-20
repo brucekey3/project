@@ -57,6 +57,16 @@ window.addEventListener("unload", function() {
 
 });
 
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  let id = sender.tab.id;
+  if (id != tabId)
+  {
+    return;
+  }
+  console.log("Page has loaded");
+  sendStaticAnalysisMessage();
+});
+
 let lastUserUsage = [];
 let lastKernelUsage = [];
 let lastIdleUsage = [];
@@ -153,15 +163,18 @@ function processPerformanceMetrics(result)
 function sendStaticAnalysisMessage()
 {
   chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-    console.log(tabId);
-    console.log(tabs[0].id);
+    //console.log(tabId);
+    //console.log(tabs[0].id);
     chrome.tabs.sendMessage(tabId, {request: "static_analysis"}, {}, function(response) {
       console.dir(response);
       if (response && response.analysis)
       {
-        let analysis = response.analysis;
-        if (analysis.install && analysis.install > 0){
-          console.log("This page may install an extension");
+        let analysisArray = response.analysis;
+        for (let analysis of analysisArray)
+        {
+          if (analysis.install && analysis.install > 0){
+            console.log("This page may install an extension");
+          }
         }
       }
     });
@@ -182,7 +195,6 @@ function onEvent(debuggeeId, message, params) {
   } else if (message == "DOM.documentUpdated") {
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
       //console.log(root.root);
-      sendStaticAnalysisMessage();
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
     });

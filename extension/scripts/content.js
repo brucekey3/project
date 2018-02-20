@@ -1,11 +1,14 @@
 // content.js
 
+window.addEventListener ("load", onLoad, false);
+
+function onLoad(e) {
+    chrome.runtime.sendMessage({data: "hasLoaded"});
+}
+
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
-    console.log("Please");
-    console.log(sender.tab ?
-                "from a content script:" + sender.tab.url :
-                "from the extension");
+
     if (request.request == "static_analysis")
     {
       let scriptList = document.scripts;
