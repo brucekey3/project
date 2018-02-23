@@ -166,10 +166,11 @@ function sendStaticAnalysisMessage()
     //console.log(tabId);
     //console.log(tabs[0].id);
     chrome.tabs.sendMessage(tabId, {request: "static_analysis"}, {}, function(response) {
-      console.dir(response);
+      //console.dir(response);
       if (response && response.analysis)
       {
         let analysisArray = response.analysis;
+        console.log("Scripts: " + analysisArray.length);
         for (let analysis of analysisArray)
         {
           if (analysis.install && analysis.install > 0){
@@ -470,6 +471,20 @@ function processResponse(params)
     container.addPathnameReport(pathname, urlReport.pathname);
   }
 
+  let resourceType = params.type;
+  /*
+    Document, Stylesheet, Image, Media, Font, Script, TextTrack,
+    XHR, Fetch, EventSource, WebSocket, Manifest, Other
+  */
+  if (resourceType === "Script")
+  {
+    console.log("Script Found");
+    console.dir(params.response);
+    if (params.response.mimeType === "application/javascript")
+    {
+      console.log("javascript found");
+    }
+  }
 
   report[url] = container;
   /*
