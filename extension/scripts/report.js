@@ -57,6 +57,7 @@ window.addEventListener("unload", function() {
 
 });
 
+/*
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   let id = sender.tab.id;
   if (id != tabId)
@@ -66,6 +67,7 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   console.log("Page has loaded");
   sendStaticAnalysisMessage();
 });
+*/
 
 let lastUserUsage = [];
 let lastKernelUsage = [];
@@ -170,7 +172,7 @@ function sendStaticAnalysisMessage()
       if (response && response.analysis)
       {
         let analysisArray = response.analysis;
-        console.log("Scripts: " + analysisArray.length);
+        //console.log("Scripts: " + analysisArray.length);
         for (let analysis of analysisArray)
         {
           if (analysis.install && analysis.install > 0){
@@ -471,20 +473,44 @@ function processResponse(params)
     container.addPathnameReport(pathname, urlReport.pathname);
   }
 
+  let scriptReport = [];
   let resourceType = params.type;
   /*
     Document, Stylesheet, Image, Media, Font, Script, TextTrack,
     XHR, Fetch, EventSource, WebSocket, Manifest, Other
   */
-  if (resourceType === "Script")
+  //console.log(resourceType);
+
+  if (resourceType === "Script" || resourceType === "Document")
   {
-    console.log("Script Found");
-    console.dir(params.response);
-    if (params.response.mimeType === "application/javascript")
-    {
-      console.log("javascript found");
+
+    //console.log("Script Found: " + numScripts);
+    //console.dir(params.response.mimeType);
+    /*
+    if (params.response.mimeType === "application/javascript"
+     || params.response.mimeType === "text/javascript")
+    {*/
+      //console.log("javascript found");
+      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {requestId: params.requestId}, function(result) {
+        let base64Encoded = result.base64Encoded;
+        let script = result.body;
+        if (base64Encoded)
+        {
+          console.log("SCRIPT IS base64Encoded");
+        }
+
+        scriptReport = createScriptReport(script);
+        if (scriptReport.length > 0)
+        {
+          reportToBeDisplayed = true;
+          container.addPathnameReport(pathname, scriptReport);
+        }
+        //console.dir(anal);
+      });
     }
-  }
+  //}
+
+
 
   report[url] = container;
   /*
@@ -499,6 +525,19 @@ function processResponse(params)
     urlReports.appendChild(container.domainContainer);
   }
   */
+}
+
+function createScriptReport(script)
+{
+  let report = []
+  let analysis = static_analysis(script);
+  console.dir(analysis);
+  if (analysis.install && analysis.install > 0)
+  {
+    report.push(generateReport("This page may try and install an extension!", SeverityEnum.SEVERE));
+  }
+
+  return report;
 }
 
 function addStatusReport(status)
