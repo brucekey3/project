@@ -7,6 +7,35 @@ let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
 
+function beginAnalysis()
+{
+  chrome.tabs.reload(tabId, {bypassCache: true}, function() {
+    chrome.debugger.onEvent.addListener(onEvent);
+    chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
+    chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
+    chrome.debugger.sendCommand({tabId:tabId}, "Profiler.startPreciseCoverage", {callCount: true, detailed: true}, function(){
+        chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
+            window.setTimeout(stop, 10000);
+        });
+    });
+
+    chrome.downloads.onCreated.addListener(downloadCreatedCallback);
+
+    chrome.system.cpu.getInfo(function (res){
+      for (let i in res.processors)
+      {
+        lastUserUsage[i] = res.processors[i].usage.user;
+        lastKernelUsage[i] = res.processors[i].usage.kernel;
+        lastIdleUsage[i] = res.processors[i].usage.idle;
+        lastTotalUsage[i] = res.processors[i].usage.total;
+      }
+      // Give the page some time to load
+      window.setTimeout(monitorCpuUsage.bind(null, 0), 100)
+    });
+  });
+
+}
+
 window.addEventListener("load", function() {
   document.getElementById("clearBtn").addEventListener("click", clear);
   document.getElementById("reportsToggle").addEventListener("click", toggleHide)
@@ -17,33 +46,8 @@ window.addEventListener("load", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.enable");
 
-
-  chrome.debugger.onEvent.addListener(onEvent);
-  chrome.tabs.reload(tabId, {bypassCache: true}, null);
-
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.startPreciseCoverage", {callCount: true, detailed: true}, function(){
-      chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
-          window.setTimeout(stop, 10000);
-      });
-  });
-
-  chrome.downloads.onCreated.addListener(downloadCreatedCallback);
-
-  chrome.system.cpu.getInfo(function (res){
-    for (let i in res.processors)
-    {
-      lastUserUsage[i] = res.processors[i].usage.user;
-      lastKernelUsage[i] = res.processors[i].usage.kernel;
-      lastIdleUsage[i] = res.processors[i].usage.idle;
-      lastTotalUsage[i] = res.processors[i].usage.total;
-    }
-    // Give the page some time to load
-    window.setTimeout(monitorCpuUsage.bind(null, 0), 5000)
-  });
-
-
+  // Give the debugger time to set up
+  window.setTimeout(beginAnalysis, 100);
 });
 
 window.addEventListener("unload", function() {
@@ -183,7 +187,7 @@ function sendStaticAnalysisMessage()
     });
   });
 }
-
+let responses = {};
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
@@ -194,7 +198,10 @@ function onEvent(debuggeeId, message, params) {
   if (message == "Network.requestWillBeSent") {
     processRequest(params);
   } else if (message == "Network.responseReceived") {
-    processResponse(params);
+    responses[params.requestId] = params;
+  } else if (message === "Network.loadingFinished") {
+    let responseParams = responses[params.requestId];
+    processResponse(responseParams);
   } else if (message == "DOM.documentUpdated") {
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
       //console.log(root.root);
@@ -491,7 +498,13 @@ function processResponse(params)
      || params.response.mimeType === "text/javascript")
     {*/
       //console.log("javascript found");
-      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {requestId: params.requestId}, function(result) {
+      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": params.requestId}, function(result) {
+        console.dir(result);
+        if (!result)
+        {
+          console.log("Empty response body");
+          return;
+        }
         let base64Encoded = result.base64Encoded;
         let script = result.body;
         if (base64Encoded)
@@ -505,7 +518,7 @@ function processResponse(params)
           reportToBeDisplayed = true;
           container.addPathnameReport(pathname, scriptReport);
         }
-        //console.dir(anal);
+        //console.dir(scriptReport);
       });
     }
   //}
