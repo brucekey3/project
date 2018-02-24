@@ -20,6 +20,7 @@ function generateChildren(parent, report)
     finding.textContent = report[i].text;
     setSeverityAttributes(finding, report[i].severity);
     parent.appendChild(finding);
+    parent.appendChild(document.createElement("br"));
   }
   return parent;
 }
@@ -168,7 +169,7 @@ class DomainContainer
     reportContainer = generateChildren(reportContainer, domainReport);
   }
 
-  addPathnameReport(pathname, pathnameReport)
+  addPathnameReport(url, pathnameReport)
   {
     if (!this.domainContainer || !this.domain)
     {
@@ -178,6 +179,19 @@ class DomainContainer
     else if (pathnameReport && pathnameReport.length == 0)
     {
       console.log("Empty pathname report");
+      return;
+    }
+
+    let parser = decomposeUrl(url);
+    let pathname = parser.pathname;
+    if (!pathname)
+    {
+      console.log("Could not extract pathname from: " + url);
+      return;
+    } else if (parser.hostname != this.domain)
+    {
+      console.log(parser.hostname + " does not match domain " + this.domain
+                  + " incorrect container found.");
       return;
     }
 
