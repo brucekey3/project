@@ -20,6 +20,7 @@ function generateChildren(parent, report)
     finding.textContent = report[i].text;
     setSeverityAttributes(finding, report[i].severity);
     parent.appendChild(finding);
+    parent.appendChild(document.createElement("br"));
   }
   return parent;
 }
@@ -50,6 +51,22 @@ function setSeverityAttributes(elem, severity)
       break;
   }
 
+}
+
+function static_analysis(script)
+{
+  let varCount = (script.match(/var/gi) || []).length;
+  let execCount = (script.match(/exec/gi) || []).length;
+  let unescapeCount = (script.match(/unescape/gi) || []).length;
+  let functionCount = (script.match(/function/gi) || []).length;
+  let install = (script.match(/chrome\.webstore\.install/gi)|| []).length;
+  return {
+    var: varCount,
+    exec: execCount,
+    unescape: unescapeCount,
+    function: functionCount,
+    install: install
+  };
 }
 
 
@@ -152,7 +169,7 @@ class DomainContainer
     reportContainer = generateChildren(reportContainer, domainReport);
   }
 
-  addPathnameReport(pathname, pathnameReport)
+  addPathnameReport(url, pathnameReport)
   {
     if (!this.domainContainer || !this.domain)
     {
@@ -165,8 +182,21 @@ class DomainContainer
       return;
     }
 
-    console.log("pathnameReport");
-    console.log(pathnameReport);
+    let parser = decomposeUrl(url);
+    let pathname = parser.pathname;
+    if (!pathname)
+    {
+      console.log("Could not extract pathname from: " + url);
+      return;
+    } else if (parser.hostname != this.domain)
+    {
+      console.log(parser.hostname + " does not match domain " + this.domain
+                  + " incorrect container found.");
+      return;
+    }
+
+    //console.log("pathnameReport");
+    //console.log(pathnameReport);
 
     let urlReports = document.getElementById("urlReports");
     let documentDomainContainer = document.getElementById(this.domain);

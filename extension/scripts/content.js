@@ -1,40 +1,38 @@
 // content.js
 
-/*
+window.addEventListener ("load", onLoad, false);
+
+function onLoad(e) {
+    chrome.runtime.sendMessage({data: "hasLoaded"});
+}
+
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
-    if (request.message === "createReport_clicked")
+
+    if (request.request == "static_analysis")
     {
-      let id = request.data;
-      chrome.runtime.sendMessage({
-        "message": "createReportWindow",
-        "data": id
-      });
-      console.log("createReportWindow message sent");
+      let scriptList = document.scripts;
+      let analysisArray = [];
+      for (let script of scriptList)
+      {
+        analysisArray.push(static_analysis(script.text));
+      }
+      sendResponse({analysis: analysisArray});
     }
 });
-*/
+
 function static_analysis(script)
 {
   let varCount = (script.match(/var/gi) || []).length;
   let execCount = (script.match(/exec/gi) || []).length;
   let unescapeCount = (script.match(/unescape/gi) || []).length;
   let functionCount = (script.match(/function/gi) || []).length;
+  let install = (script.match(/chrome\.webstore\.install/gi)|| []).length;
   return {
-    "var": varCount,
-    "exec": execCount,
-    "unescape": unescapeCount,
-    "function": functionCount
+    var: varCount,
+    exec: execCount,
+    unescape: unescapeCount,
+    function: functionCount,
+    install: install
   };
 }
-
-/*
-console.log("Scripts:");
-let scriptList = document.scripts;
-
-for (let script of scriptList) {
-  //console.log(script);
-  let anal = static_analysis(script.text);
-  console.log(anal);
-}
-*/

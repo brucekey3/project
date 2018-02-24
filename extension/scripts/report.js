@@ -7,6 +7,35 @@ let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
 
+function beginAnalysis()
+{
+  chrome.tabs.reload(tabId, {bypassCache: true}, function() {
+    chrome.debugger.onEvent.addListener(onEvent);
+    chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
+    chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
+    chrome.debugger.sendCommand({tabId:tabId}, "Profiler.startPreciseCoverage", {callCount: true, detailed: true}, function(){
+        chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
+            window.setTimeout(stop, 10000);
+        });
+    });
+
+    chrome.downloads.onCreated.addListener(downloadCreatedCallback);
+
+    chrome.system.cpu.getInfo(function (res){
+      for (let i in res.processors)
+      {
+        lastUserUsage[i] = res.processors[i].usage.user;
+        lastKernelUsage[i] = res.processors[i].usage.kernel;
+        lastIdleUsage[i] = res.processors[i].usage.idle;
+        lastTotalUsage[i] = res.processors[i].usage.total;
+      }
+      // Give the page some time to load
+      window.setTimeout(monitorCpuUsage.bind(null, 0), 100)
+    });
+  });
+
+}
+
 window.addEventListener("load", function() {
   document.getElementById("clearBtn").addEventListener("click", clear);
   document.getElementById("reportsToggle").addEventListener("click", toggleHide)
@@ -17,29 +46,32 @@ window.addEventListener("load", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.enable");
 
-  chrome.debugger.onEvent.addListener(onEvent);
-  chrome.tabs.reload(tabId, {bypassCache: true}, null);
-
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.startPreciseCoverage", {callCount: true, detailed: true}, function(){
-      chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
-          window.setTimeout(stop, 10000);
-      });
-  });
-
-  chrome.system.cpu.getInfo(function (res){
-    for (let i in res.processors)
-    {
-      lastUserUsage[i] = res.processors[i].usage.user;
-      lastKernelUsage[i] = res.processors[i].usage.kernel;
-      lastIdleUsage[i] = res.processors[i].usage.idle;
-      lastTotalUsage[i] = res.processors[i].usage.total;
-    }
-    // Give the page some time to load
-    window.setTimeout(monitorCpuUsage.bind(null, 0), 5000)
-  });
+  // Give the debugger time to set up
+  window.setTimeout(beginAnalysis, 100);
 });
+
+window.addEventListener("unload", function() {
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
+  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
+  chrome.debugger.detach({tabId:tabId});
+
+});
+
+/*
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  let id = sender.tab.id;
+  if (id != tabId)
+  {
+    return;
+  }
+  console.log("Page has loaded");
+  sendStaticAnalysisMessage();
+});
+*/
 
 let lastUserUsage = [];
 let lastKernelUsage = [];
@@ -108,20 +140,93 @@ function stop()
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stop", {}, processProfilerResults)
 }
 
-window.addEventListener("unload", function() {
-  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
-  chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
-  chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
-  chrome.debugger.detach({tabId:tabId});
-
-});
 
 /*
 *     START OF CALLBACKS
 */
+
+// Called when a download starts
+function downloadCreatedCallback(downloadItem)
+{
+  // alert("Download is starting!!");
+  //console.dir(downloadItem);
+  let downloadReport = [];
+  let id = downloadItem.id;
+  let beforeRedirects = downloadItem.url;
+  let finalUrl = downloadItem.finalUrl;
+  let mimeType = downloadItem.mime;
+  let filename = downloadItem.filename;
+  let danger = downloadItem.danger;
+
+  downloadReport.push(generateReport("The url: " + beforeRedirects
+                       + " initiated a download from: " + finalUrl,
+                      SeverityEnum.HIGH));
+
+  // TODO: Elaborate on this?
+  downloadReport.push(generateReport("Mime type: " + mimeType, SeverityEnum.UNKNOWN));
+
+  if (danger)
+  {
+    let dangerText = "";
+    let severity = SeverityEnum.UNKNOWN;
+    switch(danger)
+    {
+      case "file":
+        dangerText = "The download's filename is suspicious.";
+        severity = SeverityEnum.HIGH;
+        break;
+      case "url":
+        dangerText = "The download's URL is known to be malicious.";
+        severity = SeverityEnum.HIGH;
+        break;
+      case "content":
+        dangerText = "The downloaded file is known to be malicious.";
+        severity = SeverityEnum.HIGH;
+        break;
+      case "uncommon":
+        dangerText = "The download's URL is not commonly downloaded and could be dangerous";
+        severity = SeverityEnum.LOW;
+        break;
+      case "host":
+        dangerText = "The download came from a host known to distribute malicious binaries and is likely dangerous.";
+        severity = SeverityEnum.HIGH;
+        break;
+      case "unwanted":
+        dangerText = "The download is potentially unwanted or unsafe. E.g. it could make changes to browser or computer settings.";
+        severity = SeverityEnum.LOW;
+        break;
+      case "accepted":
+        dangerText = "The user has accepted the dangerous download.";
+        severity = SeverityEnum.HIGH;
+        break;
+      case "safe":
+        dangerText = "The download presents no known danger to the user's computer.";
+        severity = SeverityEnum.LOW;
+        break;
+      default:
+        severity = SeverityEnum.UNKNOWN;
+        // Do nothing
+    }
+    if (dangerText != "")
+    {
+      downloadReport.push(generateReport(dangerText, severity));
+    }
+  }
+
+  if (filename && filename != "")
+  {
+    let severity = SeverityEnum.UNKNOWN;
+    if (danger === "file")
+    {
+      severity = SeverityEnum.HIGH;
+    }
+    downloadReport.push(generateReport("Filename is: " + filename, severity));
+  }
+
+  let container = getDomainReportContainer(beforeRedirects);
+  container.addPathnameReport(beforeRedirects, downloadReport);
+}
+
 function processPerformanceMetrics(result)
 {
   //console.log("Performance");
@@ -136,21 +241,49 @@ function processPerformanceMetrics(result)
   }
 }
 
+function sendStaticAnalysisMessage()
+{
+  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
+    //console.log(tabId);
+    //console.log(tabs[0].id);
+    chrome.tabs.sendMessage(tabId, {request: "static_analysis"}, {}, function(response) {
+      //console.dir(response);
+      if (response && response.analysis)
+      {
+        let analysisArray = response.analysis;
+        //console.log("Scripts: " + analysisArray.length);
+        for (let analysis of analysisArray)
+        {
+          if (analysis.install && analysis.install > 0){
+            console.log("This page may install an extension");
+          }
+        }
+      }
+    });
+  });
+}
+let responses = {};
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
     return;
   }
 
-
-
   //console.log(message);
   if (message == "Network.requestWillBeSent") {
     processRequest(params);
   } else if (message == "Network.responseReceived") {
-    processResponse(params);
+    responses[params.requestId] = params;
+  } else if (message === "Network.loadingFinished") {
+    let responseParams = responses[params.requestId];
+    processResponse(responseParams);
   } else if (message == "DOM.documentUpdated") {
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
+      if (chrome.runtime.lastError)
+      {
+        console.log(chrome.runtime.lastError.message);
+        return;
+      }
       //console.log(root.root);
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
@@ -186,16 +319,12 @@ function processCertificateError(params)
   let errorType = params.errorType
   let requestURL = params.requestURL;
   let reportObj = getDomainReportContainer(requestURL);
-  let urlReports = document.getElementById("urlReports");
 
   let report = [].push(generateReport("Certificate error: " + errorType,
                                       SeverityEnum.SEVERE));
   reportObj.addDomainReport(report);
-
-  if (urlReports.querySelector("#" + reportObj.domain) == null)
-  {
-    urlReports.appendChild(reportDiv);
-  }
+  console.log("CERTIFICATE ERROR");
+  alert("certificate error");
 }
 
 function processSecurityStateChanged(params)
@@ -281,7 +410,6 @@ function toggleHide(id)
 
 }
 
-
 function clear(e)
 {
   numRedirects = 0;
@@ -304,16 +432,23 @@ function safeCheckCallback(url, result)
   {
     // Malicious
     let containerObject = getDomainReportContainer(url);
-
-    let parser = decomposeUrl(url);
-    containerObject.addPathnameReport(parser.pathname, safeReport);
-
+    containerObject.addPathnameReport(url, safeReport);
     report[url] = containerObject;
   }
 }
 
 function processInputSelector(nodeIdResults)
 {
+  if (chrome.runtime.lastError)
+  {
+    console.log(chrome.runtime.lastError.message);
+    return;
+  } else  if (!nodeIdResults)
+  {
+    console.log("processInputSelector called with undefined object");
+    return;
+  }
+
   let nodeIds = nodeIdResults.nodeIds;
   // Reset the presence of a password field
 
@@ -324,6 +459,11 @@ function processInputSelector(nodeIdResults)
     document.getElementById("passwordPresent").setAttribute("hidden", '');
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.resolveNode", {"nodeId": nodeId}, function(object)
     {
+      if (chrome.runtime.lastError)
+      {
+        console.log(chrome.runtime.lastError.message);
+        return;
+      }
       let item = object.object;
 
       if (item.description.indexOf("pass") !== -1)
@@ -346,7 +486,8 @@ function sendSafeBrowsingCheck(url)
     console.log("Cannot check empty URL");
     return;
   }
-  // How to send Post request + do something with result
+  // How to send Post request + do something with result    let dangerText = "";
+    let severity = SeverityEnum.UNKNOWN;
   let xhttp = new XMLHttpRequest();
   xhttp.onreadystatechange = function() {
       if (this.readyState == 4) {
@@ -404,8 +545,6 @@ function processResponse(params)
     container.addDomainReport(urlReport.domain);
   }
 
-  let parser = decomposeUrl(url);
-  let pathname = parser.pathname;
   // Status report will be per unique URL i.e. combination of domain and path
   let statusReport = addStatusReport(params.response.status);
   if (statusReport && statusReport.length > 0)
@@ -418,7 +557,7 @@ function processResponse(params)
     }
     // Otherwise create a report just for the status
     else {
-      container.addPathnameReport(pathname, statusReport);
+      container.addPathnameReport(url, statusReport);
     }
   }
 
@@ -428,8 +567,52 @@ function processResponse(params)
     //console.dir(urlReport.pathname);
     //console.log("");
     reportToBeDisplayed = true;
-    container.addPathnameReport(pathname, urlReport.pathname);
+    container.addPathnameReport(url, urlReport.pathname);
   }
+
+  let scriptReport = [];
+  let resourceType = params.type;
+  /*
+    Document, Stylesheet, Image, Media, Font, Script, TextTrack,
+    XHR, Fetch, EventSource, WebSocket, Manifest, Other
+  */
+  //console.log(resourceType);
+
+  if (resourceType === "Script" || resourceType === "Document")
+  {
+
+    //console.log("Script Found: " + numScripts);
+    //console.dir(params.response.mimeType);
+    /*
+    if (params.response.mimeType === "application/javascript"
+     || params.response.mimeType === "text/javascript")
+    {*/
+      //console.log("javascript found");
+      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": params.requestId}, function(result) {
+        //console.dir(result);
+        if (!result)
+        {
+          console.log("Empty response body");
+          return;
+        }
+        let base64Encoded = result.base64Encoded;
+        let script = result.body;
+        if (base64Encoded)
+        {
+          console.log("SCRIPT IS base64Encoded");
+        }
+
+        scriptReport = createScriptReport(script);
+        if (scriptReport.length > 0)
+        {
+          reportToBeDisplayed = true;
+          container.addPathnameReport(url, scriptReport);
+        }
+        //console.dir(scriptReport);
+      });
+    }
+  //}
+
 
 
   report[url] = container;
@@ -445,6 +628,19 @@ function processResponse(params)
     urlReports.appendChild(container.domainContainer);
   }
   */
+}
+
+function createScriptReport(script)
+{
+  let report = []
+  let analysis = static_analysis(script);
+  //console.dir(analysis);
+  if (analysis.install && analysis.install > 0)
+  {
+    report.push(generateReport("This page may try and install an extension!", SeverityEnum.SEVERE));
+  }
+
+  return report;
 }
 
 function addStatusReport(status)
