@@ -61,17 +61,16 @@ window.addEventListener("unload", function() {
 
 });
 
-/*
+// At the moment a message is sent on page load
+// Nothing to do here at the moment
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   let id = sender.tab.id;
   if (id != tabId)
   {
     return;
   }
-  console.log("Page has loaded");
-  sendStaticAnalysisMessage();
 });
-*/
+
 
 let lastUserUsage = [];
 let lastKernelUsage = [];
@@ -524,6 +523,16 @@ function processRequest(params)
 
 function processResponse(params)
 {
+  if (!params)
+  {
+    console.log("processResponse called with no params");
+    return;
+  }
+  else if (!params.response)
+  {
+    console.log("processResponse called with no response");
+    return;
+  }
   let url = params.response.url;
   let urlReport = createUrlReport(url);
 
@@ -590,13 +599,19 @@ function processResponse(params)
       //console.log("javascript found");
       chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": params.requestId}, function(result) {
         //console.dir(result);
-        if (!result)
+
+        if (chrome.runtime.lastError)
+        {
+          console.log(chrome.runtime.lastError.message);
+          return;
+        } else if (!result)
         {
           console.log("Empty response body");
           return;
         }
         let base64Encoded = result.base64Encoded;
         let script = result.body;
+        // use btoa()?
         if (base64Encoded)
         {
           console.log("SCRIPT IS base64Encoded");
