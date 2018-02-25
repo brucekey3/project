@@ -156,8 +156,8 @@ class DomainContainer
       console.log("Empty domain report");
       return;
     }
-    console.log("domainReport");
-    console.log(domainReport);
+    //console.log("domainReport");
+    //console.log(domainReport);
     let urlReports = document.getElementById("urlReports");
     let documentDomainContainer = document.getElementById(this.domain);
     if (!documentDomainContainer)

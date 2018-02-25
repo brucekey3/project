@@ -9,6 +9,8 @@ let redirectThreshold = 1;
 
 function beginAnalysis()
 {
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.clearBrowserCache", {}, null);
+
   chrome.tabs.reload(tabId, {bypassCache: true}, function() {
     chrome.debugger.onEvent.addListener(onEvent);
     chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
@@ -59,16 +61,6 @@ window.addEventListener("unload", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
   chrome.debugger.detach({tabId:tabId});
 
-});
-
-// At the moment a message is sent on page load
-// Nothing to do here at the moment
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  let id = sender.tab.id;
-  if (id != tabId)
-  {
-    return;
-  }
 });
 
 
@@ -261,6 +253,39 @@ function sendStaticAnalysisMessage()
     });
   });
 }
+
+chrome.webRequest.onBeforeRedirect.addListener(function(details) {
+  let requestId = details.requestId;
+  let urlBeforeRedirect = details.url;
+  let status = details.statusCode;
+  let urlAfterRedirect = details.redirectUrl;
+
+  let reportObj = getDomainReportContainer(urlBeforeRedirect);
+
+  let severity = SeverityEnum.UNKNOWN;
+
+  let beforeDomain = decomposeUrl(urlBeforeRedirect).hostname;
+  let afterDomain = decomposeUrl(urlAfterRedirect).hostname;
+  if (beforeDomain != afterDomain)
+  {
+    severity = SeverityEnum.MILD;
+  }
+  else
+  {
+    severity = SeverityEnum.LOW;
+  }
+
+  let reportText = urlBeforeRedirect + " status " + status + " redirecting to: "
+                 + urlAfterRedirect;
+  console.log(reportText);
+  let report = [];
+  report.push(generateReport(reportText, severity));
+  console.dir(report);
+  reportObj.addPathnameReport(urlBeforeRedirect, report);
+
+
+}, {urls: ["<all_urls>"]}, []);
+
 let responses = {};
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
@@ -269,14 +294,29 @@ function onEvent(debuggeeId, message, params) {
   }
 
   //console.log(message);
-  if (message == "Network.requestWillBeSent") {
+  if (message == "Network.requestWillBeSent")
+  {
     processRequest(params);
-  } else if (message == "Network.responseReceived") {
+  }
+  else if (message == "Network.responseReceived")
+  {
     responses[params.requestId] = params;
-  } else if (message === "Network.loadingFinished") {
+    processResponse(params);
+  }
+  // Once loading has finished we can analyse the actual response body
+  else if (message === "Network.loadingFinished")
+  {
     let responseParams = responses[params.requestId];
-    processResponse(responseParams);
-  } else if (message == "DOM.documentUpdated") {
+    processResponseBody(responseParams);
+    delete responses[params.requestId];
+  }
+  else if (message === "Network.loadingFailed")
+  {
+    console.log("fail");
+    console.dir(params);
+  }
+  else if (message === "DOM.documentUpdated")
+  {
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
       if (chrome.runtime.lastError)
       {
@@ -288,14 +328,17 @@ function onEvent(debuggeeId, message, params) {
 
     });
   }
-  else if (message == "Security.securityStateChanged") {
+  else if (message == "Security.securityStateChanged")
+  {
     processSecurityStateChanged(params);
   }
   // Note: this may be deprecated
-  else if (message == "Security.certificateError") {
+  else if (message == "Security.certificateError")
+  {
     processCertificateError(params);
   }
-  else if (message == "Performance.metrics") {
+  else if (message == "Performance.metrics")
+  {
     processPerformanceMetrics(params);
   }
   else if (message == "Profiler.consoleProfileFinished")
@@ -485,8 +528,9 @@ function sendSafeBrowsingCheck(url)
     console.log("Cannot check empty URL");
     return;
   }
+
   // How to send Post request + do something with result    let dangerText = "";
-    let severity = SeverityEnum.UNKNOWN;
+  let severity = SeverityEnum.UNKNOWN;
   let xhttp = new XMLHttpRequest();
   xhttp.onreadystatechange = function() {
       if (this.readyState == 4) {
@@ -517,8 +561,14 @@ function sendSafeBrowsingCheck(url)
 
 function processRequest(params)
 {
-  // This involves an async request so can't return a report
-  sendSafeBrowsingCheck(params.request.url);
+  let url = params.request.url;
+  let parser = decomposeUrl(url);
+  // If it's a data: url then don't send safebrowsing check
+  if (parser.hostname !== "" && parser.protocol != "chrome-extension:")
+  {
+    // This involves an async request so can't return a report
+    sendSafeBrowsingCheck(url);
+  }
 }
 
 function processResponse(params)
@@ -543,22 +593,16 @@ function processResponse(params)
     return;
   }
   let container = getDomainReportContainer(url);
-  let reportToBeDisplayed = false;
 
   if (urlReport.domain && urlReport.domain.length > 0)
   {
-    //console.log("Url: " + url);
-    //console.dir(urlReport.domain);
-    //console.log("");
-    reportToBeDisplayed = true;
     container.addDomainReport(urlReport.domain);
   }
 
   // Status report will be per unique URL i.e. combination of domain and path
-  let statusReport = addStatusReport(params.response.status);
+  let statusReport = createStatusReport(params.response);
   if (statusReport && statusReport.length > 0)
   {
-    reportToBeDisplayed = true;
     // If we have a report for this pathname then add the status report to that
     if (urlReport.pathname)
     {
@@ -572,34 +616,24 @@ function processResponse(params)
 
   if (urlReport.pathname && urlReport.pathname.length > 0)
   {
-    //console.log("Url22: " + url);
-    //console.dir(urlReport.pathname);
-    //console.log("");
-    reportToBeDisplayed = true;
     container.addPathnameReport(url, urlReport.pathname);
   }
 
-  let scriptReport = [];
+  report[url] = container;
+}
+
+function processResponseBody(params)
+{
+  let url = params.response.url;
+  let container = getDomainReportContainer(url);
   let resourceType = params.type;
   /*
     Document, Stylesheet, Image, Media, Font, Script, TextTrack,
     XHR, Fetch, EventSource, WebSocket, Manifest, Other
   */
-  //console.log(resourceType);
-
   if (resourceType === "Script" || resourceType === "Document")
   {
-
-    //console.log("Script Found: " + numScripts);
-    //console.dir(params.response.mimeType);
-    /*
-    if (params.response.mimeType === "application/javascript"
-     || params.response.mimeType === "text/javascript")
-    {*/
-      //console.log("javascript found");
       chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": params.requestId}, function(result) {
-        //console.dir(result);
-
         if (chrome.runtime.lastError)
         {
           console.log(chrome.runtime.lastError.message);
@@ -617,32 +651,15 @@ function processResponse(params)
           console.log("SCRIPT IS base64Encoded");
         }
 
-        scriptReport = createScriptReport(script);
+        let scriptReport = createScriptReport(script);
         if (scriptReport.length > 0)
         {
           reportToBeDisplayed = true;
           container.addPathnameReport(url, scriptReport);
         }
-        //console.dir(scriptReport);
+
       });
     }
-  //}
-
-
-
-  report[url] = container;
-  /*
-  if (reportToBeDisplayed)
-  {
-    let urlReports = document.getElementById("urlReports");
-    // Prevent duplicates from being added
-    if (urlReports.contains(container.domainContainer))
-    {
-      urlReports.removeChild(container.domainContainer);
-    }
-    urlReports.appendChild(container.domainContainer);
-  }
-  */
 }
 
 function createScriptReport(script)
@@ -658,12 +675,16 @@ function createScriptReport(script)
   return report;
 }
 
-function addStatusReport(status)
+// This needs to take in the response object so that we can add relevant
+// information such as url to redirect to in the case of 3xx codes
+function createStatusReport(response)
 {
+  let status = response.status;
   let report = [];
   if (status >= 300 && status < 400)
   {
-    numRedirects++;
+    console.log("REDIRECT THO");
+    numRedirects += 1;
     document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
     report.push(generateReport("Status " + status + " redirect",
                                SeverityEnum.LOW));
