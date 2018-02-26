@@ -286,6 +286,8 @@ chrome.webRequest.onBeforeRedirect.addListener(function(details) {
 
 }, {urls: ["<all_urls>"]}, []);
 
+chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
+
 let responses = {};
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
@@ -293,12 +295,7 @@ function onEvent(debuggeeId, message, params) {
     return;
   }
 
-  //console.log(message);
-  if (message == "Network.requestWillBeSent")
-  {
-    processRequest(params);
-  }
-  else if (message == "Network.responseReceived")
+  if (message == "Network.responseReceived")
   {
     responses[params.requestId] = params;
     processResponse(params);
@@ -559,11 +556,11 @@ function sendSafeBrowsingCheck(url)
 }
 
 
-function processRequest(params)
+function processRequest(details)
 {
-  let url = params.request.url;
+  let url = details.url;
   let parser = decomposeUrl(url);
-  // If it's a data: url then don't send safebrowsing check
+  // If it's a data: or chrome-extension: url then don't send safebrowsing check
   if (parser.hostname !== "" && parser.protocol != "chrome-extension:")
   {
     // This involves an async request so can't return a report
