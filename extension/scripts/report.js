@@ -91,30 +91,38 @@ function monitorCpuUsage(lastUsage)
       let kernelUsagePercentage = ((kernelUsage - lastKernelUsage[i])/ totalUsageDiff)*100;
       let idleUsagePercentage   = ((idleUsage   - lastIdleUsage[i])  / totalUsageDiff)*100;
 
-      let user   = document.createElement("div");
+      let processorInfo = document.createElement("section");
+      processorInfo.style.border = "thin solid black";
+      let title = document.createElement("span");
+      title.textContent = "Processor " + i + ":";
+      let user   = document.createElement("span");
       user.textContent = "User usage: " + userUsagePercentage + "%";
-      let kernel = document.createElement("div");
+      let kernel = document.createElement("span");
       kernel.textContent = "Kernel usage: " + kernelUsagePercentage + "%";
-      let idle   = document.createElement("div");
+      let idle   = document.createElement("span");
       idle.textContent = "Idle usage: " + idleUsagePercentage + "%";
 
       if (userUsagePercentage > 70)
       {
         user.style.backgroundColor = "red";
-        let warning = document.createElement("div");
+        let warning = document.createElement("span");
         warning.style.backgroundColor = "red";
-        warning.textContent = "Warning - high CPU usage. "
+        warning.textContent = "Warning - high CPU usage on processor " + i + ". "
                             + "This site may be mining cryptocurrency.";
-        resourcesDiv.appendChild(warning);
-        resourcesDiv.appendChild(document.createElement("br"));
+        processorInfo.appendChild(warning);
+        processorInfo.appendChild(document.createElement("br"));
       }
 
-      resourcesDiv.appendChild(user);
-      resourcesDiv.appendChild(document.createElement("br"));
-      resourcesDiv.appendChild(kernel);
-      resourcesDiv.appendChild(document.createElement("br"));
-      resourcesDiv.appendChild(idle);
+      processorInfo.appendChild(title);
+      processorInfo.appendChild(document.createElement("br"));
+      processorInfo.appendChild(user);
+      processorInfo.appendChild(document.createElement("br"));
+      processorInfo.appendChild(kernel);
+      processorInfo.appendChild(document.createElement("br"));
+      processorInfo.appendChild(idle);
+      processorInfo.appendChild(document.createElement("br"));
 
+      resourcesDiv.appendChild(processorInfo);
       lastUserUsage[i]   = userUsage;
       lastKernelUsage[i] = kernelUsage;
       lastIdleUsage[i]   = idleUsage;
@@ -254,7 +262,13 @@ function sendStaticAnalysisMessage()
   });
 }
 
-chrome.webRequest.onBeforeRedirect.addListener(function(details) {
+let responses = {};
+
+chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, []);
+chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
+chrome.webRequest.onResponseStarted.addListener(processResponse, {urls: ["<all_urls>"]}, ["responseHeaders"]);
+
+function processRedirect(details) {
   let requestId = details.requestId;
   let urlBeforeRedirect = details.url;
   let status = details.statusCode;
@@ -275,37 +289,29 @@ chrome.webRequest.onBeforeRedirect.addListener(function(details) {
     severity = SeverityEnum.LOW;
   }
 
+  numRedirects += 1;
+  document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+
   let reportText = urlBeforeRedirect + " status " + status + " redirecting to: "
                  + urlAfterRedirect;
-  console.log(reportText);
   let report = [];
   report.push(generateReport(reportText, severity));
-  console.dir(report);
   reportObj.addPathnameReport(urlBeforeRedirect, report);
+}
 
-
-}, {urls: ["<all_urls>"]}, []);
-
-chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
-
-let responses = {};
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
     return;
   }
 
-  if (message == "Network.responseReceived")
+  if (message === "Network.responseReceived")
   {
     responses[params.requestId] = params;
-    processResponse(params);
   }
-  // Once loading has finished we can analyse the actual response body
   else if (message === "Network.loadingFinished")
   {
-    let responseParams = responses[params.requestId];
-    processResponseBody(responseParams);
-    delete responses[params.requestId];
+    processResponseBody(params);
   }
   else if (message === "Network.loadingFailed")
   {
@@ -568,19 +574,17 @@ function processRequest(details)
   }
 }
 
-function processResponse(params)
+function processResponse(details)
 {
-  if (!params)
+  if (!details)
   {
     console.log("processResponse called with no params");
     return;
   }
-  else if (!params.response)
-  {
-    console.log("processResponse called with no response");
-    return;
-  }
-  let url = params.response.url;
+
+
+
+  let url = details.url;
   let urlReport = createUrlReport(url);
 
   // If we have already done this url then null is returned and we should
@@ -597,7 +601,7 @@ function processResponse(params)
   }
 
   // Status report will be per unique URL i.e. combination of domain and path
-  let statusReport = createStatusReport(params.response);
+  let statusReport = createStatusReport(details);
   if (statusReport && statusReport.length > 0)
   {
     // If we have a report for this pathname then add the status report to that
@@ -621,21 +625,25 @@ function processResponse(params)
 
 function processResponseBody(params)
 {
-  let url = params.response.url;
+  let details = responses[params.requestId];
+  let url = details.response.url;
   let container = getDomainReportContainer(url);
-  let resourceType = params.type;
+  let resourceType = details.type;
   /*
-    Document, Stylesheet, Image, Media, Font, Script, TextTrack,
-    XHR, Fetch, EventSource, WebSocket, Manifest, Other
+    "main_frame", "sub_frame", "stylesheet", "script", "image", "font",
+    "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket",
+     or "other"
   */
-  if (resourceType === "Script" || resourceType === "Document")
+  if (resourceType === "Script"
+   || resourceType === "Document")
   {
-      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": params.requestId}, function(result) {
+      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": details.requestId}, function(result) {
         if (chrome.runtime.lastError)
         {
           console.log(chrome.runtime.lastError.message);
           return;
-        } else if (!result)
+        }
+        else if (!result)
         {
           console.log("Empty response body");
           return;
@@ -657,6 +665,7 @@ function processResponseBody(params)
 
       });
     }
+    delete responses[details.requestId];
 }
 
 function createScriptReport(script)
@@ -672,11 +681,11 @@ function createScriptReport(script)
   return report;
 }
 
-// This needs to take in the response object so that we can add relevant
+// This needs to take in the details object so that we can add relevant
 // information such as url to redirect to in the case of 3xx codes
-function createStatusReport(response)
+function createStatusReport(details)
 {
-  let status = response.status;
+  let status = details.statusCode;
   let report = [];
   if (status >= 300 && status < 400)
   {
