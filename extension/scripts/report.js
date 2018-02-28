@@ -1,7 +1,7 @@
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-let API_KEY = "AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ";
+
 let tabId = parseInt(window.location.search.substring(1));
 let report = {};
 let numRedirects = 0;
@@ -469,16 +469,102 @@ function clear(e)
   }
 }
 
-function safeCheckCallback(url, result)
+/*
+{
+  "matches": [
+    {
+      "threatType": "SOCIAL_ENGINEERING",
+      "platformType": "ANY_PLATFORM",
+      "threat": {
+        "url": "https://you-fanspage-recovery.tk/"
+      },
+      "cacheDuration": "300s",
+      "threatEntryType": "URL"
+    }
+  ]
+}
+ex 2
+{
+  "matches": [{
+    "threatType":      "MALWARE",
+    "platformType":    "WINDOWS",
+    "threatEntryType": "URL",
+    "threat":          {"url": "http://www.urltocheck1.org/"},
+    "threatEntryMetadata": {
+      "entries": [{
+        "key": "malware_threat_type",
+        "value": "landing"
+     }]
+    },
+    "cacheDuration": "300.000s"
+  }, {
+    "threatType":      "MALWARE",
+    "platformType":    "WINDOWS",
+    "threatEntryType": "URL",
+    "threat":          {"url": "http://www.urltocheck2.org/"},
+    "threatEntryMetadata": {
+      "entries": [{
+        "key":   "malware_threat_type",
+        "value": "landing"
+     }]
+    },
+    "cacheDuration": "300.000s"
+  }]
+}
+
+
+
+*/
+function addSafeBrowsingReport(matches)
+{
+  for (match of matches)
+  {
+    let url = match.threat.url;
+    let safeReport = [];
+    switch (match.threatType)
+    {
+      case "MALWARE":
+        let safeReportText = "Site is malware targeting: " + match.platformType;
+        // TODO: make this change severity based on platforms?
+        safeReport.push(generateReport(safeReportText, SeverityEnum.SEVERE));
+
+        for (let entry of matches.threatEntryMetadata.entries)
+        {
+          safeReportText = entry.key + ": " + entry.value;
+          safeReport.push(generateReport(safeReportText, SeverityEnum.SEVERE));
+        }
+        break;
+      case "SOCIAL_ENGINEERING":
+        let socialEngineeringText = "Site is confirmed social engineering";
+        safeReport.push(generateReport(socialEngineeringText, SeverityEnum.SEVERE));
+        break;
+      case "UNWANTED_SOFTWARE":
+        break;
+      case "POTENTIALLY_HARMFUL_APPLICATION":
+        break;
+      case "THREAT_TYPE_UNSPECIFIED":
+        break;
+      default:
+        let defaultText = "Unknown reason that site is harmful";
+        safeReport.push(generateReport(defaultText, SeverityEnum.SEVERE));
+        break;
+    }
+
+
+    let containerObject = getDomainReportContainer(url);
+    containerObject.addDomainReport(safeReport);
+    report[url] = containerObject;
+  }
+}
+
+function safeCheckCallback(url, matches)
 {
   //console.log("Checked: " + url);
   //console.log("Got: " + result);
-  if (result !== undefined)
+  if (matches !== undefined)
   {
-    // Malicious
-    let containerObject = getDomainReportContainer(url);
-    containerObject.addPathnameReport(url, safeReport);
-    report[url] = containerObject;
+    // Malicious3
+    addSafeBrowsingReport(matches);
   }
 }
 
@@ -524,11 +610,20 @@ function processInputSelector(nodeIdResults)
 *     END OF CALLBACKS
 */
 
+let API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
+let domainsChecked = {};
 function sendSafeBrowsingCheck(url)
 {
   if (url && url.length == 0)
   {
     console.log("Cannot check empty URL");
+    return;
+  }
+
+  let parser = decomposeUrl(url);
+  if (domainsChecked[parser.hostname])
+  {
+    console.log("Already checked: " + parser.hostname);
     return;
   }
 
@@ -544,21 +639,24 @@ function sendSafeBrowsingCheck(url)
         safeCheckCallback(url, obj.matches);
       }
   };
-  xhttp.open("POST", "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + API_KEY);
+  xhttp.open("POST", 'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=' + API_KEY);
   xhttp.setRequestHeader('Content-Type', 'application/json');
-  requestBody = {
+  let requestBody = {
    "client": {
      "clientId":      "HoneyBrowser",
      "clientVersion": "0.0.1"
    },
    "threatInfo": {
      "threatTypes":      ["MALWARE", "SOCIAL_ENGINEERING"],
-     "platformTypes":    ["LINUX", "WINDOWS"],
+     "platformTypes":    ["ANY_PLATFORM"],
      "threatEntryTypes": ["URL"],
-     "threatEntries": [{"url": url}]
+     "threatEntries": [
+       {"url": parser.hostname}
+     ]
    }
   };
   xhttp.send(JSON.stringify(requestBody));
+  domainsChecked[parser.hostname] = true;
 }
 
 
