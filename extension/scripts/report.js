@@ -240,28 +240,6 @@ function processPerformanceMetrics(result)
   }
 }
 
-function sendStaticAnalysisMessage()
-{
-  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-    //console.log(tabId);
-    //console.log(tabs[0].id);
-    chrome.tabs.sendMessage(tabId, {request: "static_analysis"}, {}, function(response) {
-      //console.dir(response);
-      if (response && response.analysis)
-      {
-        let analysisArray = response.analysis;
-        //console.log("Scripts: " + analysisArray.length);
-        for (let analysis of analysisArray)
-        {
-          if (analysis.install && analysis.install > 0){
-            console.log("This page may install an extension");
-          }
-        }
-      }
-    });
-  });
-}
-
 let responses = {};
 
 chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, []);
@@ -312,11 +290,6 @@ function onEvent(debuggeeId, message, params) {
   else if (message === "Network.loadingFinished")
   {
     processResponseBody(params);
-  }
-  else if (message === "Network.loadingFailed")
-  {
-    console.log("fail");
-    console.dir(params);
   }
   else if (message === "DOM.documentUpdated")
   {
@@ -670,19 +643,7 @@ function processRequest(details)
     // This involves an async request so can't return a report
     sendSafeBrowsingCheck(url);
   }
-}
 
-function processResponse(details)
-{
-  if (!details)
-  {
-    console.log("processResponse called with no params");
-    return;
-  }
-
-
-
-  let url = details.url;
   let urlReport = createUrlReport(url);
 
   // If we have already done this url then null is returned and we should
@@ -698,24 +659,28 @@ function processResponse(details)
     container.addDomainReport(urlReport.domain);
   }
 
+  if (urlReport.pathname && urlReport.pathname.length > 0)
+  {
+    container.addPathnameReport(url, urlReport.pathname);
+  }
+}
+
+function processResponse(details)
+{
+  if (!details)
+  {
+    console.log("processResponse called with no params");
+    return;
+  }
+
+  let url = details.url;
+  let container = getDomainReportContainer(url);
+
   // Status report will be per unique URL i.e. combination of domain and path
   let statusReport = createStatusReport(details);
   if (statusReport && statusReport.length > 0)
   {
-    // If we have a report for this pathname then add the status report to that
-    if (urlReport.pathname)
-    {
-      urlReport.pathname = urlReport.pathname.concat(statusReport);
-    }
-    // Otherwise create a report just for the status
-    else {
-      container.addPathnameReport(url, statusReport);
-    }
-  }
-
-  if (urlReport.pathname && urlReport.pathname.length > 0)
-  {
-    container.addPathnameReport(url, urlReport.pathname);
+    container.addPathnameReport(url, statusReport);
   }
 
   report[url] = container;
