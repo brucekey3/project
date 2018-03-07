@@ -1,11 +1,36 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-let API_KEY = "AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ";
 let tabId = parseInt(window.location.search.substring(1));
 let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
+
+chrome.runtime.onMessage.addListener(
+  function(request, sender, sendResponse) {
+      // Only listen to messages for this tab
+      if (sender.tab.id != tabId)
+      {
+        return;
+      }
+      if (request.message === "extensionInstallStarted") {
+        let extensionReport = [];
+        let details = request.data;
+        // If we have no details or no URL we cannot create a report
+        // The latter is since we need to know which domain container to add it
+        // to
+        if (details && details.iniatiatorUrl)
+        {
+          let reportString = "Page may be trying to install an extension!";
+          extensionReport.push(generateReport(reportString, SeverityEnum.SEVERE));
+          if (details.webstoreUrl)
+          {
+            reportString = "See extension at: " + details.webstoreUrl;
+            extensionReport.push(generateReport(reportString, SeverityEnum.UNKNOWN));
+          }
+          let container = getDomainReportContainer(details.iniatiatorUrl);
+          container.addPathnameReport(details.iniatiatorUrl, extensionReport);
+        }
+      }
+  }
+);
 
 function beginAnalysis()
 {
@@ -91,30 +116,38 @@ function monitorCpuUsage(lastUsage)
       let kernelUsagePercentage = ((kernelUsage - lastKernelUsage[i])/ totalUsageDiff)*100;
       let idleUsagePercentage   = ((idleUsage   - lastIdleUsage[i])  / totalUsageDiff)*100;
 
-      let user   = document.createElement("div");
+      let processorInfo = document.createElement("section");
+      processorInfo.style.border = "thin solid black";
+      let title = document.createElement("span");
+      title.textContent = "Processor " + i + ":";
+      let user   = document.createElement("span");
       user.textContent = "User usage: " + userUsagePercentage + "%";
-      let kernel = document.createElement("div");
+      let kernel = document.createElement("span");
       kernel.textContent = "Kernel usage: " + kernelUsagePercentage + "%";
-      let idle   = document.createElement("div");
+      let idle   = document.createElement("span");
       idle.textContent = "Idle usage: " + idleUsagePercentage + "%";
 
       if (userUsagePercentage > 70)
       {
         user.style.backgroundColor = "red";
-        let warning = document.createElement("div");
+        let warning = document.createElement("span");
         warning.style.backgroundColor = "red";
-        warning.textContent = "Warning - high CPU usage. "
+        warning.textContent = "Warning - high CPU usage on processor " + i + ". "
                             + "This site may be mining cryptocurrency.";
-        resourcesDiv.appendChild(warning);
-        resourcesDiv.appendChild(document.createElement("br"));
+        processorInfo.appendChild(warning);
+        processorInfo.appendChild(document.createElement("br"));
       }
 
-      resourcesDiv.appendChild(user);
-      resourcesDiv.appendChild(document.createElement("br"));
-      resourcesDiv.appendChild(kernel);
-      resourcesDiv.appendChild(document.createElement("br"));
-      resourcesDiv.appendChild(idle);
+      processorInfo.appendChild(title);
+      processorInfo.appendChild(document.createElement("br"));
+      processorInfo.appendChild(user);
+      processorInfo.appendChild(document.createElement("br"));
+      processorInfo.appendChild(kernel);
+      processorInfo.appendChild(document.createElement("br"));
+      processorInfo.appendChild(idle);
+      processorInfo.appendChild(document.createElement("br"));
 
+      resourcesDiv.appendChild(processorInfo);
       lastUserUsage[i]   = userUsage;
       lastKernelUsage[i] = kernelUsage;
       lastIdleUsage[i]   = idleUsage;
@@ -232,29 +265,13 @@ function processPerformanceMetrics(result)
   }
 }
 
-function sendStaticAnalysisMessage()
-{
-  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-    //console.log(tabId);
-    //console.log(tabs[0].id);
-    chrome.tabs.sendMessage(tabId, {request: "static_analysis"}, {}, function(response) {
-      //console.dir(response);
-      if (response && response.analysis)
-      {
-        let analysisArray = response.analysis;
-        //console.log("Scripts: " + analysisArray.length);
-        for (let analysis of analysisArray)
-        {
-          if (analysis.install && analysis.install > 0){
-            console.log("This page may install an extension");
-          }
-        }
-      }
-    });
-  });
-}
+let responses = {};
 
-chrome.webRequest.onBeforeRedirect.addListener(function(details) {
+chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, []);
+chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
+chrome.webRequest.onResponseStarted.addListener(processResponse, {urls: ["<all_urls>"]}, ["responseHeaders"]);
+
+function processRedirect(details) {
   let requestId = details.requestId;
   let urlBeforeRedirect = details.url;
   let status = details.statusCode;
@@ -275,45 +292,29 @@ chrome.webRequest.onBeforeRedirect.addListener(function(details) {
     severity = SeverityEnum.LOW;
   }
 
+  numRedirects += 1;
+  document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+
   let reportText = urlBeforeRedirect + " status " + status + " redirecting to: "
                  + urlAfterRedirect;
-  console.log(reportText);
   let report = [];
   report.push(generateReport(reportText, severity));
-  console.dir(report);
   reportObj.addPathnameReport(urlBeforeRedirect, report);
+}
 
-
-}, {urls: ["<all_urls>"]}, []);
-
-let responses = {};
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
     return;
   }
 
-  //console.log(message);
-  if (message == "Network.requestWillBeSent")
-  {
-    processRequest(params);
-  }
-  else if (message == "Network.responseReceived")
+  if (message === "Network.responseReceived")
   {
     responses[params.requestId] = params;
-    processResponse(params);
   }
-  // Once loading has finished we can analyse the actual response body
   else if (message === "Network.loadingFinished")
   {
-    let responseParams = responses[params.requestId];
-    processResponseBody(responseParams);
-    delete responses[params.requestId];
-  }
-  else if (message === "Network.loadingFailed")
-  {
-    console.log("fail");
-    console.dir(params);
+    processResponseBody(params);
   }
   else if (message === "DOM.documentUpdated")
   {
@@ -466,16 +467,102 @@ function clear(e)
   }
 }
 
-function safeCheckCallback(url, result)
+/*
+{
+  "matches": [
+    {
+      "threatType": "SOCIAL_ENGINEERING",
+      "platformType": "ANY_PLATFORM",
+      "threat": {
+        "url": "https://you-fanspage-recovery.tk/"
+      },
+      "cacheDuration": "300s",
+      "threatEntryType": "URL"
+    }
+  ]
+}
+ex 2
+{
+  "matches": [{
+    "threatType":      "MALWARE",
+    "platformType":    "WINDOWS",
+    "threatEntryType": "URL",
+    "threat":          {"url": "http://www.urltocheck1.org/"},
+    "threatEntryMetadata": {
+      "entries": [{
+        "key": "malware_threat_type",
+        "value": "landing"
+     }]
+    },
+    "cacheDuration": "300.000s"
+  }, {
+    "threatType":      "MALWARE",
+    "platformType":    "WINDOWS",
+    "threatEntryType": "URL",
+    "threat":          {"url": "http://www.urltocheck2.org/"},
+    "threatEntryMetadata": {
+      "entries": [{
+        "key":   "malware_threat_type",
+        "value": "landing"
+     }]
+    },
+    "cacheDuration": "300.000s"
+  }]
+}
+
+
+
+*/
+function addSafeBrowsingReport(matches)
+{
+  for (match of matches)
+  {
+    let url = match.threat.url;
+    let safeReport = [];
+    switch (match.threatType)
+    {
+      case "MALWARE":
+        let safeReportText = "Site is malware targeting: " + match.platformType;
+        // TODO: make this change severity based on platforms?
+        safeReport.push(generateReport(safeReportText, SeverityEnum.SEVERE));
+
+        for (let entry of matches.threatEntryMetadata.entries)
+        {
+          safeReportText = entry.key + ": " + entry.value;
+          safeReport.push(generateReport(safeReportText, SeverityEnum.SEVERE));
+        }
+        break;
+      case "SOCIAL_ENGINEERING":
+        let socialEngineeringText = "Site is confirmed social engineering";
+        safeReport.push(generateReport(socialEngineeringText, SeverityEnum.SEVERE));
+        break;
+      case "UNWANTED_SOFTWARE":
+        break;
+      case "POTENTIALLY_HARMFUL_APPLICATION":
+        break;
+      case "THREAT_TYPE_UNSPECIFIED":
+        break;
+      default:
+        let defaultText = "Unknown reason that site is harmful";
+        safeReport.push(generateReport(defaultText, SeverityEnum.SEVERE));
+        break;
+    }
+
+
+    let containerObject = getDomainReportContainer(url);
+    containerObject.addDomainReport(safeReport);
+    report[url] = containerObject;
+  }
+}
+
+function safeCheckCallback(url, matches)
 {
   //console.log("Checked: " + url);
   //console.log("Got: " + result);
-  if (result !== undefined)
+  if (matches !== undefined)
   {
-    // Malicious
-    let containerObject = getDomainReportContainer(url);
-    containerObject.addPathnameReport(url, safeReport);
-    report[url] = containerObject;
+    // Malicious3
+    addSafeBrowsingReport(matches);
   }
 }
 
@@ -521,11 +608,20 @@ function processInputSelector(nodeIdResults)
 *     END OF CALLBACKS
 */
 
+let API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
+let domainsChecked = {};
 function sendSafeBrowsingCheck(url)
 {
   if (url && url.length == 0)
   {
     console.log("Cannot check empty URL");
+    return;
+  }
+
+  let parser = decomposeUrl(url);
+  if (domainsChecked[parser.hostname])
+  {
+    //console.log("Already checked: " + parser.hostname);
     return;
   }
 
@@ -541,49 +637,38 @@ function sendSafeBrowsingCheck(url)
         safeCheckCallback(url, obj.matches);
       }
   };
-  xhttp.open("POST", "https://safebrowsing.googleapis.com/v4/threatMatches:find?key=" + API_KEY);
+  xhttp.open("POST", 'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=' + API_KEY);
   xhttp.setRequestHeader('Content-Type', 'application/json');
-  requestBody = {
+  let requestBody = {
    "client": {
      "clientId":      "HoneyBrowser",
      "clientVersion": "0.0.1"
    },
    "threatInfo": {
      "threatTypes":      ["MALWARE", "SOCIAL_ENGINEERING"],
-     "platformTypes":    ["LINUX", "WINDOWS"],
+     "platformTypes":    ["ANY_PLATFORM"],
      "threatEntryTypes": ["URL"],
-     "threatEntries": [{"url": url}]
+     "threatEntries": [
+       {"url": parser.hostname}
+     ]
    }
   };
   xhttp.send(JSON.stringify(requestBody));
+  domainsChecked[parser.hostname] = true;
 }
 
 
-function processRequest(params)
+function processRequest(details)
 {
-  let url = params.request.url;
+  let url = details.url;
   let parser = decomposeUrl(url);
-  // If it's a data: url then don't send safebrowsing check
+  // If it's a data: or chrome-extension: url then don't send safebrowsing check
   if (parser.hostname !== "" && parser.protocol != "chrome-extension:")
   {
     // This involves an async request so can't return a report
     sendSafeBrowsingCheck(url);
   }
-}
 
-function processResponse(params)
-{
-  if (!params)
-  {
-    console.log("processResponse called with no params");
-    return;
-  }
-  else if (!params.response)
-  {
-    console.log("processResponse called with no response");
-    return;
-  }
-  let url = params.response.url;
   let urlReport = createUrlReport(url);
 
   // If we have already done this url then null is returned and we should
@@ -599,24 +684,28 @@ function processResponse(params)
     container.addDomainReport(urlReport.domain);
   }
 
-  // Status report will be per unique URL i.e. combination of domain and path
-  let statusReport = createStatusReport(params.response);
-  if (statusReport && statusReport.length > 0)
-  {
-    // If we have a report for this pathname then add the status report to that
-    if (urlReport.pathname)
-    {
-      urlReport.pathname = urlReport.pathname.concat(statusReport);
-    }
-    // Otherwise create a report just for the status
-    else {
-      container.addPathnameReport(url, statusReport);
-    }
-  }
-
   if (urlReport.pathname && urlReport.pathname.length > 0)
   {
     container.addPathnameReport(url, urlReport.pathname);
+  }
+}
+
+function processResponse(details)
+{
+  if (!details)
+  {
+    console.log("processResponse called with no params");
+    return;
+  }
+
+  let url = details.url;
+  let container = getDomainReportContainer(url);
+
+  // Status report will be per unique URL i.e. combination of domain and path
+  let statusReport = createStatusReport(details);
+  if (statusReport && statusReport.length > 0)
+  {
+    container.addPathnameReport(url, statusReport);
   }
 
   report[url] = container;
@@ -624,21 +713,25 @@ function processResponse(params)
 
 function processResponseBody(params)
 {
-  let url = params.response.url;
+  let details = responses[params.requestId];
+  let url = details.response.url;
   let container = getDomainReportContainer(url);
-  let resourceType = params.type;
+  let resourceType = details.type;
   /*
-    Document, Stylesheet, Image, Media, Font, Script, TextTrack,
-    XHR, Fetch, EventSource, WebSocket, Manifest, Other
+    "main_frame", "sub_frame", "stylesheet", "script", "image", "font",
+    "object", "xmlhttprequest", "ping", "csp_report", "media", "websocket",
+     or "other"
   */
-  if (resourceType === "Script" || resourceType === "Document")
+  if (resourceType === "Script"
+   || resourceType === "Document")
   {
-      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": params.requestId}, function(result) {
+      chrome.debugger.sendCommand({tabId: tabId}, "Network.getResponseBody", {"requestId": details.requestId}, function(result) {
         if (chrome.runtime.lastError)
         {
           console.log(chrome.runtime.lastError.message);
           return;
-        } else if (!result)
+        }
+        else if (!result)
         {
           console.log("Empty response body");
           return;
@@ -660,6 +753,7 @@ function processResponseBody(params)
 
       });
     }
+    delete responses[details.requestId];
 }
 
 function createScriptReport(script)
@@ -675,11 +769,11 @@ function createScriptReport(script)
   return report;
 }
 
-// This needs to take in the response object so that we can add relevant
+// This needs to take in the details object so that we can add relevant
 // information such as url to redirect to in the case of 3xx codes
-function createStatusReport(response)
+function createStatusReport(details)
 {
-  let status = response.status;
+  let status = details.statusCode;
   let report = [];
   if (status >= 300 && status < 400)
   {

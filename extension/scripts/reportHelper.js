@@ -188,10 +188,18 @@ class DomainContainer
     {
       console.log("Could not extract pathname from: " + url);
       return;
-    } else if (parser.hostname != this.domain)
+    }
+    else if (parser.hostname != this.domain)
     {
       console.log(parser.hostname + " does not match domain " + this.domain
                   + " incorrect container found.");
+      return;
+    }
+
+    // If there is no pathname add it as a domain report instead
+    if (pathname === "" || pathname === "/")
+    {
+      this.addDomainReport(pathnameReport);
       return;
     }
 

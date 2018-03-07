@@ -28,6 +28,7 @@
     "debugger",
     "system",
     "system.cpu",
-    "downloads"
+    "downloads",
+    "management"
   ]
 }
