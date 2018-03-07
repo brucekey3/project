@@ -23,6 +23,7 @@ chrome.webRequest.onBeforeRequest.addListener(
   ["blocking", "requestBody"]);
 */
 var version = "1.0";
+let extensionId = undefined;
 
 function onAttachReport(tabId)
 {
@@ -30,7 +31,7 @@ function onAttachReport(tabId)
     alert(chrome.runtime.lastError.message);
     return;
   }
-  
+
   chrome.windows.create(
      {url: "html/report.html?" + tabId,
       type: "popup",
@@ -39,6 +40,7 @@ function onAttachReport(tabId)
 
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
+    console.log(request.message);
     if (request.message === "createReportWindow") {
       console.log("createReportWindow message received");
 
@@ -51,8 +53,31 @@ chrome.runtime.onMessage.addListener(
 
 
     }
+    else if (request.message === "hasLoaded")
+    {
+      let tabId = sender.tab.id;
+    }
+    // Basically just pass through here and send data to the
+    // report.js so the report can be added
+    else if (request.message ===  "extensionInstallStarted")
+    {
+      let tabId = sender.tab.id;
+      console.log("Message received: " + request.data);
+      chrome.tabs.sendMessage(tabId, {
+        "message": "extensionInstallStarted",
+        "data": request.data
+      });
+    }
+    else if (request.message === "getExtensionId")
+    {
+      sendResponse({extensionId: extensionId});
+    }
 
     return true;
 });
 
 console.log("background");
+chrome.management.getSelf(function(result) {
+  console.log(result.id);
+  extensionId = result.id;
+});

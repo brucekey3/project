@@ -1,11 +1,36 @@
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 let tabId = parseInt(window.location.search.substring(1));
 let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
+
+chrome.runtime.onMessage.addListener(
+  function(request, sender, sendResponse) {
+      // Only listen to messages for this tab
+      if (sender.tab.id != tabId)
+      {
+        return;
+      }
+      if (request.message === "extensionInstallStarted") {
+        let extensionReport = [];
+        let details = request.data;
+        // If we have no details or no URL we cannot create a report
+        // The latter is since we need to know which domain container to add it
+        // to
+        if (details && details.iniatiatorUrl)
+        {
+          let reportString = "Page may be trying to install an extension!";
+          extensionReport.push(generateReport(reportString, SeverityEnum.SEVERE));
+          if (details.webstoreUrl)
+          {
+            reportString = "See extension at: " + details.webstoreUrl;
+            extensionReport.push(generateReport(reportString, SeverityEnum.UNKNOWN));
+          }
+          let container = getDomainReportContainer(details.iniatiatorUrl);
+          container.addPathnameReport(details.iniatiatorUrl, extensionReport);
+        }
+      }
+  }
+);
 
 function beginAnalysis()
 {
@@ -596,7 +621,7 @@ function sendSafeBrowsingCheck(url)
   let parser = decomposeUrl(url);
   if (domainsChecked[parser.hostname])
   {
-    console.log("Already checked: " + parser.hostname);
+    //console.log("Already checked: " + parser.hostname);
     return;
   }
 
