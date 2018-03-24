@@ -713,6 +713,11 @@ function processResponse(details)
 
 function processResponseBody(params)
 {
+  if (!params)
+  {
+    return;
+  }
+
   let details = responses[params.requestId];
   let url = details.response.url;
   let container = getDomainReportContainer(url);
@@ -765,6 +770,7 @@ function createScriptReport(script)
   {
     report.push(generateReport("This page may try and install an extension!", SeverityEnum.SEVERE));
   }
+  // TODO: add report here for location change
 
   return report;
 }
