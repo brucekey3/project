@@ -3,10 +3,12 @@
 window.addEventListener ("load", onLoad, false);
 
 document.addEventListener("hookEvent", function(data) {
+  console.log("triggered!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+  console.dir(data);
   // Pass the custom message that's passed in through the event
   chrome.runtime.sendMessage({
-    message: data.message,
-    data: data.detail
+    message: data.detail.message,
+    data: data.detail.detail
   });
 });
 
@@ -33,16 +35,16 @@ function injectChromeWebstoreInstallHook(extensionId)
       let detailObj = {};
       detailObj.webstoreUrl = url;
       detailObj.iniatiatorUrl = document.location.href;
-      let event = new CustomEvent('Event', {message: "extensionInstallStarted" , detail: detailObj});
+      let event = new CustomEvent('Event', {detail: {message: "extensionInstallStarted", detail: detailObj}});
       event.initEvent('hookEvent');
       document.dispatchEvent(event);
       return store(url, onSuccess, onFailure);
     };
   };
-  injectFunction(functionToInject);
+  injectFunction(functionToInject, extensionId);
 }
 
-function injectFunction(functionToInject)
+function injectFunction(functionToInject, extensionId)
 {
   let code = '(' + functionToInject + ')(' + JSON.stringify(extensionId) + ');';
   let script = document.createElement("script");
