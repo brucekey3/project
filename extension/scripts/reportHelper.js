@@ -55,18 +55,17 @@ function setSeverityAttributes(elem, severity)
 
 function static_analysis(script)
 {
-  let varCount = (script.match(/var/gi) || []).length;
-  let execCount = (script.match(/exec/gi) || []).length;
-  let unescapeCount = (script.match(/unescape/gi) || []).length;
-  let functionCount = (script.match(/function/gi) || []).length;
-  let install = (script.match(/chrome\.webstore\.install/gi)|| []).length;
-  return {
-    var: varCount,
-    exec: execCount,
-    unescape: unescapeCount,
-    function: functionCount,
-    install: install
-  };
+  let analysis = {};
+  analysis.varCount = (script.match(/var/gi) || []).length;
+  analysis.execCount = (script.match(/exec/gi) || []).length;
+  analysis.unescapeCount = (script.match(/unescape/gi) || []).length;
+  analysis.functionCount = (script.match(/function/gi) || []).length;
+  analysis.install = (script.match(/chrome\.webstore\.install/gi)|| []).length;
+  analysis.possibleRedirect = (script.match(/document\.location\.href[\s]*=/gi)|| []).length;
+  analysis.possibleRedirect += (script.match(/document\.location\.replace[\s]*=/gi)|| []).length;
+  analysis.possibleRedirect += (script.match(/document\.location\.assign[\s]*=/gi)|| []).length;
+
+  return analysis;
 }
 
 
