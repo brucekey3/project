@@ -311,11 +311,7 @@ function onEvent(debuggeeId, message, params) {
   if (message === "Network.responseReceived")
   {
     responses[params.requestId] = params;
-    console.log("For " + params.response.url);
-    console.dir(params.response.securityDetails);
-    chrome.debugger.sendCommand({tabId:tabId}, "Network.getCertificate", {origin: params.response.url}, function(tableNames) {
-        console.dir(tableNames);
-    });
+    processInitialResponse(params);
   }
   else if (message === "Network.loadingFinished")
   {
@@ -352,6 +348,30 @@ function onEvent(debuggeeId, message, params) {
     processProfilerResults(params);
   }
 
+}
+
+const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+function processInitialResponse(params)
+{
+  console.log("For " + params.response.url);
+  //console.dir(params.response.securityDetails);
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.getCertificate", {origin: params.response.url}, function(tableNames) {
+    console.dir(tableNames);
+  });
+
+  let endTimestamp = params.response.securityDetails.validTo;
+  let currentdate = new Date();
+  //currentdate.getDate()
+  //currentdate.getMonth()
+  //currentdate.getFullYear() + " @ "
+
+  let endDate = getDateOfTimestamp(endTimestamp);
+
+  // Discard the time and time-zone information.
+  var utc1 = Date.UTC(currentdate.getFullYear(), currentdate.getMonth(), currentdate.getDate());
+  var utc2 = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  difference = Math.floor((utc2 - utc1) / _MS_PER_DAY);
+  console.log("Difference " + difference);
 }
 
 function processProfilerResults(results)
