@@ -311,6 +311,11 @@ function onEvent(debuggeeId, message, params) {
   if (message === "Network.responseReceived")
   {
     responses[params.requestId] = params;
+    console.log("For " + params.response.url);
+    console.dir(params.response.securityDetails);
+    chrome.debugger.sendCommand({tabId:tabId}, "Network.getCertificate", {origin: params.response.url}, function(tableNames) {
+        console.dir(tableNames);
+    });
   }
   else if (message === "Network.loadingFinished")
   {
