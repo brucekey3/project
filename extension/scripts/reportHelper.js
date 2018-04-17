@@ -12,16 +12,31 @@ function generateReport(text, severity)
   return {text: text, severity: severity};
 }
 
-function generateChildren(parent, report)
+function generateChildren(parent, report, label)
 {
+  let container = document.createElement("div");
+  if (label)
+  {
+    container.innerHTML = "<u>" + label + "</u></br>";
+    let id = parent.id + label;
+    let elem = document.getElementById(id);
+    if (elem)
+    {
+      parent.removeChild(elem);
+    }
+
+    container.setAttribute("id", id);
+  }
+
   for (let i in report)
   {
     let finding = document.createElement("span");
     finding.textContent = report[i].text;
     setSeverityAttributes(finding, report[i].severity);
-    parent.appendChild(finding);
-    parent.appendChild(document.createElement("br"));
+    container.appendChild(finding);
+    container.appendChild(document.createElement("br"));
   }
+  parent.appendChild(container);
   return parent;
 }
 
@@ -112,9 +127,9 @@ class PathnameContainer
     return this.pathnameContainer;
   }
 
-  addPathnameReport(report)
+  addPathnameReport(report, label)
   {
-    this.pathnameContainer = generateChildren(this.pathnameContainer, report);
+    this.pathnameContainer = generateChildren(this.pathnameContainer, report, label);
   }
 }
 
@@ -160,7 +175,7 @@ class DomainContainer
     return this.domainContainer;
   }
 
-  addDomainReport(domainReport)
+  addDomainReport(domainReport, label)
   {
     if (!domainReport)
     {
@@ -181,10 +196,10 @@ class DomainContainer
     }
 
     let reportContainer = document.getElementById("report_" + this.domain);
-    reportContainer = generateChildren(reportContainer, domainReport);
+    reportContainer = generateChildren(reportContainer, domainReport, label);
   }
 
-  addPathnameReport(url, pathnameReport)
+  addPathnameReport(url, pathnameReport, label)
   {
     if (!this.domainContainer || !this.domain)
     {
@@ -230,7 +245,7 @@ class DomainContainer
 
     let pathnameContainerObj = new PathnameContainer();
     pathnameContainerObj.buildPathnameContainer(pathname);
-    pathnameContainerObj.addPathnameReport(pathnameReport);
+    pathnameContainerObj.addPathnameReport(pathnameReport, label);
     let pathnamesContainer = document.getElementById("pathnames" + this.domain);
     if (!pathnamesContainer)
     {

@@ -355,15 +355,19 @@ function processInitialResponse(params)
 {
   console.log("For " + params.response.url);
 
-  console.dir(params.response.securityDetails);
   /*
   chrome.debugger.sendCommand({tabId:tabId}, "Network.getCertificate", {origin: params.response.url}, function(tableNames) {
     console.dir(tableNames);
   });
   */
 
+  let reportObj = getDomainReportContainer(params.response.url);
+
   if (params.response.securityDetails)
   {
+    securityReport = [];
+    console.dir(params.response.securityDetails);
+
     let startTimestamp = params.response.securityDetails.validFrom;
     let endTimestamp = params.response.securityDetails.validTo;
     let currentdate = new Date();
@@ -375,13 +379,24 @@ function processInitialResponse(params)
     let endDate = getDateOfTimestamp(endTimestamp);
 
     // Discard the time and time-zone information.
-    var utc1 = Date.UTC(currentdate.getFullYear(), currentdate.getMonth(), currentdate.getDate());
-    var utc2 = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-    difference = Math.floor((utc2 - utc1) / _MS_PER_DAY);
+    let startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    let currUtc = Date.UTC(currentdate.getFullYear(), currentdate.getMonth(), currentdate.getDate());
+    let endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
 
-    console.log("Issued: " + startDate);
-    console.log("Runs out: " + endDate);
-    console.log("Difference " + difference);
+    // Time until certificate expiry
+    timeRemaining = Math.floor((endUtc - currUtc) / _MS_PER_DAY);
+    // Time the certificate was issued for
+    issuedFor = Math.floor((endUtc - startUtc) / _MS_PER_DAY);
+    // How long ago the certificate was issued
+    issuedAgo = Math.floor((currUtc - startUtc) / _MS_PER_DAY);
+
+    securityReport.push(generateReport("Issued: " + startDate, SeverityEnum.UNKNOWN));
+    securityReport.push(generateReport("Runs out: " + endDate, SeverityEnum.UNKNOWN));
+    securityReport.push(generateReport("Issued for " + issuedFor, SeverityEnum.UNKNOWN));
+    securityReport.push(generateReport("Time remaining: " + timeRemaining, SeverityEnum.UNKNOWN));
+    securityReport.push(generateReport("Time since issued: " + issuedAgo, SeverityEnum.UNKNOWN));
+
+    reportObj.addDomainReport(securityReport, "CertificateDetails");
   }
 }
 
@@ -406,6 +421,47 @@ function processCertificateError(params)
   alert("certificate error");
 }
 
+function createSecurityExplanations(explanations)
+{
+  if (explanations.length == 0)
+  {
+    console.log("No explanations found");
+  }
+
+  let section = document.createElement("span");
+
+  for (explain of explanations)
+  {
+    let explanationSection = document.createElement("span");
+    explanationSection.textContent = "Security state is: " + explain.securityState + '\n';
+    explanationSection.textContent += "Factor is: " + explain.title + '\n';
+    explanationSection.textContent += "Summary: " + explain.summary + '\n';
+    explanationSection.textContent += "Full explanation: " + explain.description + '\n';
+
+    let mixedContentTypeSection = document.createElement("span");
+    switch (explain.mixedContentType)
+    {
+      case "none":
+        mixedContentTypeSection.textContent = "No mixed content";
+        break;
+      case "blockable":
+        mixedContentTypeSection.textContent = "Mixed content is blockable";
+        break;
+      case "optionally-blockable":
+        mixedContentTypeSection.textContent = "Mixed content is optionally-blockable";
+        break;
+      default:
+        console.log("mixedContentType is " + explain.mixedContentType);
+        break;
+    }
+    section.appendChild(explanationSection);
+    section.appendChild(mixedContentTypeSection);
+
+  }
+
+  return section;
+}
+
 function processSecurityStateChanged(params)
 {
   // unknown, neutral, insecure, secure, info
@@ -425,20 +481,25 @@ function processSecurityStateChanged(params)
   if (securityState !== "unknown")
   {
     let state = document.createElement("span");
-    state.textContent = "Security state is: " + securityState;
+
     switch (securityState)
     {
       case "neutral":
         setSeverityAttributes(state, SeverityEnum.MILD);
+        state.appendChild(createSecurityExplanations(explanations));
         break;
       case "insecure":
         setSeverityAttributes(state, SeverityEnum.HIGH);
+        state.appendChild(createSecurityExplanations(explanations));
         break;
       case "secure":
+        state.textContent = "Security state is: " + securityState;
         break;
       case "info":
+        state.appendChild(createSecurityExplanations(explanations));
         break;
       default:
+        state.textContent = "Security state is: " + securityState;
         break;
     }
     div.appendChild(state);
@@ -455,8 +516,22 @@ function processSecurityStateChanged(params)
     isCryptographic.textContent = "Page was loaded insecurely.";
     setSeverityAttributes(isCryptographic, SeverityEnum.HIGH);
   }
+
   div.appendChild(isCryptographic);
   div.appendChild(document.createElement("br"));
+
+  if (insecureContentStatus)
+  {
+    let insecureContentStatusElem = document.createElement("div");
+    insecureContentStatusElem.textContent = "Ran Mixed Content: " + insecureContentStatus.ranMixedContent + '\n';
+    insecureContentStatusElem.textContent += "Displayed Mixed Content: " + insecureContentStatus.displayedMixedContent + '\n';
+    insecureContentStatusElem.textContent += "Contained Mixed Form: " + insecureContentStatus.containedMixedForm + '\n';
+    insecureContentStatusElem.textContent += "Ran Content With Certificate Errors (e.g. scripts): " + insecureContentStatus.ranContentWithCertErrors + '\n';
+    insecureContentStatusElem.textContent += "Displayed Content With Certificate Errors (e.g. images): " + insecureContentStatus.displayedContentWithCertErrors + '\n';
+    insecureContentStatusElem.textContent += "State of page if insecure content is run: " + insecureContentStatus.ranInsecureContentStyle + '\n';
+    insecureContentStatusElem.textContent += "State of page if insecure content is displayed: " + insecureContentStatus.displayedInsecureContentStyle + '\n';
+    div.appendChild(insecureContentStatusElem);
+  }
   //console.log("Security state changed");
   //console.log(params);
 }
