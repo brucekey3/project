@@ -745,7 +745,7 @@ function addSafeBrowsingReport(matches)
 
 
     let containerObject = getDomainReportContainer(url);
-    containerObject.addDomainReport(safeReport);
+    containerObject.addDomainReport(safeReport, "SafeBrowsing");
     report[url] = containerObject;
   }
 }
@@ -826,7 +826,7 @@ function processInputSelector(nodeIdResults)
 */
 
 let API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
-let domainsChecked = {};
+
 function sendSafeBrowsingCheck(url)
 {
   if (url && url.length == 0)
@@ -836,11 +836,6 @@ function sendSafeBrowsingCheck(url)
   }
 
   let parser = decomposeUrl(url);
-  if (domainsChecked[parser.hostname])
-  {
-    //console.log("Already checked: " + parser.hostname);
-    return;
-  }
 
   // How to send Post request + do something with result    let dangerText = "";
   let severity = SeverityEnum.UNKNOWN;
@@ -871,7 +866,6 @@ function sendSafeBrowsingCheck(url)
    }
   };
   xhttp.send(JSON.stringify(requestBody));
-  domainsChecked[parser.hostname] = true;
 }
 
 
@@ -964,6 +958,8 @@ function processResponseBody(params)
         if (base64Encoded)
         {
           console.log("SCRIPT IS base64Encoded");
+          // Decode
+          script = atob(script);
         }
 
         let scriptReport = createScriptReport(script);
