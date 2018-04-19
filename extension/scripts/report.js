@@ -350,23 +350,33 @@ function onEvent(debuggeeId, message, params) {
 
 }
 
+
 const _MS_PER_DAY = 1000 * 60 * 60 * 24;
 function processInitialResponse(params)
 {
-  console.log("For " + params.response.url);
+  //console.log("For " + params.response.url);
+
 
   /*
+
+  // Need to figure out how to decode this
+
   chrome.debugger.sendCommand({tabId:tabId}, "Network.getCertificate", {origin: params.response.url}, function(tableNames) {
+    if (!tableNames)
+    {
+      return;
+    }
     console.dir(tableNames);
   });
   */
+
 
   let reportObj = getDomainReportContainer(params.response.url);
 
   if (params.response.securityDetails)
   {
     securityReport = [];
-    console.dir(params.response.securityDetails);
+    //console.dir(params.response.securityDetails);
 
     let startTimestamp = params.response.securityDetails.validFrom;
     let endTimestamp = params.response.securityDetails.validTo;
@@ -390,15 +400,88 @@ function processInitialResponse(params)
     // How long ago the certificate was issued
     issuedAgo = Math.floor((currUtc - startUtc) / _MS_PER_DAY);
 
-    securityReport.push(generateReport("Issued: " + startDate, SeverityEnum.UNKNOWN));
-    securityReport.push(generateReport("Runs out: " + endDate, SeverityEnum.UNKNOWN));
-    securityReport.push(generateReport("Issued for " + issuedFor, SeverityEnum.UNKNOWN));
-    securityReport.push(generateReport("Time remaining: " + timeRemaining, SeverityEnum.UNKNOWN));
-    securityReport.push(generateReport("Time since issued: " + issuedAgo, SeverityEnum.UNKNOWN));
+    let startDateSeverity = SeverityEnum.UNKNOWN;
+    let endDateSeverity = SeverityEnum.UNKNOWN;
+    let durationSeverity = SeverityEnum.UNKNOWN;
+
+    if (timeRemaining <= 0)
+    {
+      endDateSeverity = SeverityEnum.SEVERE;
+    }
+    else
+    {
+      if (issuedFor <= 86.5)
+      {
+        // benign
+      }
+      else
+      {
+        if (timeRemaining <= 123.5 )
+        {
+           if (issuedAgo <= 748)
+           {
+             // MALICIOUS
+             startDateSeverity = SeverityEnum.MILD;
+           }
+           else
+           {
+             // Benign
+           }
+        }
+        else
+        {
+          if (issuedFor <= 915.0)
+          {
+            if (issuedFor <= 429.0)
+            {
+              if (issuedFor <= 272.5)
+              {
+                // benign
+              }
+              else // issued for > 272.5
+              {
+                if (timeRemaining <= 283.5)
+                {
+                  if (issuedFor <= 365.5)
+                  {
+                    durationSeverity = SeverityEnum.MILD;
+                  }
+                  else // issued for > 365.5
+                  {
+                    // benign
+                  }
+                }
+                else // Time til expires > 283.5
+                {
+                  // Malicious
+                  endDateSeverity = SeverityEnum.MILD;
+                }
+              }
+            }
+            else // Issued for > 429
+            {
+              // Benign
+            }
+          }
+          else // issued for > 915
+          {
+              // MALICIOUS
+              durationSeverity = SeverityEnum.MILD;
+          }
+        }
+      }
+    }
+
+    securityReport.push(generateReport("Issued: " + startDate, startDateSeverity));
+    securityReport.push(generateReport("Runs out: " + endDate, endDateSeverity));
+    securityReport.push(generateReport("Issued for " + issuedFor, durationSeverity));
+    securityReport.push(generateReport("Time remaining: " + timeRemaining, endDateSeverity));
+    securityReport.push(generateReport("Time since issued: " + issuedAgo, startDateSeverity));
 
     reportObj.addDomainReport(securityReport, "CertificateDetails");
   }
 }
+
 
 function processProfilerResults(results)
 {
@@ -433,7 +516,8 @@ function createSecurityExplanations(explanations)
   for (explain of explanations)
   {
     let explanationSection = document.createElement("span");
-    explanationSection.textContent = "Security state is: " + explain.securityState + '\n';
+    explanationSection.textContent = '\n';
+    explanationSection.textContent += "Security state is: " + explain.securityState + '\n';
     explanationSection.textContent += "Factor is: " + explain.title + '\n';
     explanationSection.textContent += "Summary: " + explain.summary + '\n';
     explanationSection.textContent += "Full explanation: " + explain.description + '\n';
@@ -690,7 +774,6 @@ function processInputSelector(nodeIdResults)
   }
 
   let nodeIds = nodeIdResults.nodeIds;
-  // Reset the presence of a password field
 
   for (let id in nodeIds)
   {
@@ -704,9 +787,32 @@ function processInputSelector(nodeIdResults)
         console.log(chrome.runtime.lastError.message);
         return;
       }
+
+      chrome.debugger.sendCommand({tabId:tabId}, "DOM.describeNode", {"nodeId": nodeId}, function(object)
+      {
+        if (chrome.runtime.lastError)
+        {
+          console.log(chrome.runtime.lastError.message);
+          return;
+        }
+        let node = object.node;
+        console.dir(node.attributes);
+        if (node && node.attributes && node.attributes.length > 0)
+        {
+          // Stored as name1,value1,name2,value2, etc
+          for (let i = 0; i < node.attributes.length - 1; i +=2)
+          {
+            if (node.attributes[i] === "type" && node.attributes[i+1] === "password")
+            {
+              document.getElementById("passwordPresent").removeAttribute("hidden");
+            }
+          }
+        }
+      });
+
       let item = object.object;
 
-      if (item.description.indexOf("pass") !== -1)
+      if (item.description.indexOf("pass") !== -1 || item.type === "password")
       {
         document.getElementById("passwordPresent").removeAttribute("hidden");
         //console.log("Password input detected");

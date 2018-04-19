@@ -26,15 +26,9 @@ def tree_to_code(tree, feature_names):
 
     recurse(0, 1)
 
-iris = load_iris()
-y = iris.target
-print type(y)
-print y
-
 X = []
-Y = np.array([0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1])
-print type(Y)
-print Y
+Y = np.array([1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])
+
 labels = []
 
 with open('results2.csv', 'rb') as csvfile:
