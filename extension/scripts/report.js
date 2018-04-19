@@ -311,6 +311,7 @@ function onEvent(debuggeeId, message, params) {
   if (message === "Network.responseReceived")
   {
     responses[params.requestId] = params;
+    processInitialResponse(params);
   }
   else if (message === "Network.loadingFinished")
   {
@@ -349,6 +350,139 @@ function onEvent(debuggeeId, message, params) {
 
 }
 
+
+const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+function processInitialResponse(params)
+{
+  //console.log("For " + params.response.url);
+
+
+  /*
+
+  // Need to figure out how to decode this
+
+  chrome.debugger.sendCommand({tabId:tabId}, "Network.getCertificate", {origin: params.response.url}, function(tableNames) {
+    if (!tableNames)
+    {
+      return;
+    }
+    console.dir(tableNames);
+  });
+  */
+
+
+  let reportObj = getDomainReportContainer(params.response.url);
+
+  if (params.response.securityDetails)
+  {
+    securityReport = [];
+    //console.dir(params.response.securityDetails);
+
+    let startTimestamp = params.response.securityDetails.validFrom;
+    let endTimestamp = params.response.securityDetails.validTo;
+    let currentdate = new Date();
+    //currentdate.getDate()
+    //currentdate.getMonth()
+    //currentdate.getFullYear() + " @ "
+
+    let startDate = getDateOfTimestamp(startTimestamp);
+    let endDate = getDateOfTimestamp(endTimestamp);
+
+    // Discard the time and time-zone information.
+    let startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+    let currUtc = Date.UTC(currentdate.getFullYear(), currentdate.getMonth(), currentdate.getDate());
+    let endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+    // Time until certificate expiry
+    timeRemaining = Math.floor((endUtc - currUtc) / _MS_PER_DAY);
+    // Time the certificate was issued for
+    issuedFor = Math.floor((endUtc - startUtc) / _MS_PER_DAY);
+    // How long ago the certificate was issued
+    issuedAgo = Math.floor((currUtc - startUtc) / _MS_PER_DAY);
+
+    let startDateSeverity = SeverityEnum.UNKNOWN;
+    let endDateSeverity = SeverityEnum.UNKNOWN;
+    let durationSeverity = SeverityEnum.UNKNOWN;
+
+    if (timeRemaining <= 0)
+    {
+      endDateSeverity = SeverityEnum.SEVERE;
+    }
+    else
+    {
+      if (issuedFor <= 86.5)
+      {
+        // benign
+      }
+      else
+      {
+        if (timeRemaining <= 123.5 )
+        {
+           if (issuedAgo <= 748)
+           {
+             // MALICIOUS
+             startDateSeverity = SeverityEnum.MILD;
+           }
+           else
+           {
+             // Benign
+           }
+        }
+        else
+        {
+          if (issuedFor <= 915.0)
+          {
+            if (issuedFor <= 429.0)
+            {
+              if (issuedFor <= 272.5)
+              {
+                // benign
+              }
+              else // issued for > 272.5
+              {
+                if (timeRemaining <= 283.5)
+                {
+                  if (issuedFor <= 365.5)
+                  {
+                    durationSeverity = SeverityEnum.MILD;
+                  }
+                  else // issued for > 365.5
+                  {
+                    // benign
+                  }
+                }
+                else // Time til expires > 283.5
+                {
+                  // Malicious
+                  endDateSeverity = SeverityEnum.MILD;
+                }
+              }
+            }
+            else // Issued for > 429
+            {
+              // Benign
+            }
+          }
+          else // issued for > 915
+          {
+              // MALICIOUS
+              durationSeverity = SeverityEnum.MILD;
+          }
+        }
+      }
+    }
+
+    securityReport.push(generateReport("Issued: " + startDate, startDateSeverity));
+    securityReport.push(generateReport("Runs out: " + endDate, endDateSeverity));
+    securityReport.push(generateReport("Issued for " + issuedFor, durationSeverity));
+    securityReport.push(generateReport("Time remaining: " + timeRemaining, endDateSeverity));
+    securityReport.push(generateReport("Time since issued: " + issuedAgo, startDateSeverity));
+
+    reportObj.addDomainReport(securityReport, "CertificateDetails");
+  }
+}
+
+
 function processProfilerResults(results)
 {
   //console.log("Profiler");
@@ -370,6 +504,48 @@ function processCertificateError(params)
   alert("certificate error");
 }
 
+function createSecurityExplanations(explanations)
+{
+  if (explanations.length == 0)
+  {
+    console.log("No explanations found");
+  }
+
+  let section = document.createElement("span");
+
+  for (explain of explanations)
+  {
+    let explanationSection = document.createElement("span");
+    explanationSection.textContent = '\n';
+    explanationSection.textContent += "Security state is: " + explain.securityState + '\n';
+    explanationSection.textContent += "Factor is: " + explain.title + '\n';
+    explanationSection.textContent += "Summary: " + explain.summary + '\n';
+    explanationSection.textContent += "Full explanation: " + explain.description + '\n';
+
+    let mixedContentTypeSection = document.createElement("span");
+    switch (explain.mixedContentType)
+    {
+      case "none":
+        mixedContentTypeSection.textContent = "No mixed content";
+        break;
+      case "blockable":
+        mixedContentTypeSection.textContent = "Mixed content is blockable";
+        break;
+      case "optionally-blockable":
+        mixedContentTypeSection.textContent = "Mixed content is optionally-blockable";
+        break;
+      default:
+        console.log("mixedContentType is " + explain.mixedContentType);
+        break;
+    }
+    section.appendChild(explanationSection);
+    section.appendChild(mixedContentTypeSection);
+
+  }
+
+  return section;
+}
+
 function processSecurityStateChanged(params)
 {
   // unknown, neutral, insecure, secure, info
@@ -389,20 +565,25 @@ function processSecurityStateChanged(params)
   if (securityState !== "unknown")
   {
     let state = document.createElement("span");
-    state.textContent = "Security state is: " + securityState;
+
     switch (securityState)
     {
       case "neutral":
         setSeverityAttributes(state, SeverityEnum.MILD);
+        state.appendChild(createSecurityExplanations(explanations));
         break;
       case "insecure":
         setSeverityAttributes(state, SeverityEnum.HIGH);
+        state.appendChild(createSecurityExplanations(explanations));
         break;
       case "secure":
+        state.textContent = "Security state is: " + securityState;
         break;
       case "info":
+        state.appendChild(createSecurityExplanations(explanations));
         break;
       default:
+        state.textContent = "Security state is: " + securityState;
         break;
     }
     div.appendChild(state);
@@ -419,8 +600,22 @@ function processSecurityStateChanged(params)
     isCryptographic.textContent = "Page was loaded insecurely.";
     setSeverityAttributes(isCryptographic, SeverityEnum.HIGH);
   }
+
   div.appendChild(isCryptographic);
   div.appendChild(document.createElement("br"));
+
+  if (insecureContentStatus)
+  {
+    let insecureContentStatusElem = document.createElement("div");
+    insecureContentStatusElem.textContent = "Ran Mixed Content: " + insecureContentStatus.ranMixedContent + '\n';
+    insecureContentStatusElem.textContent += "Displayed Mixed Content: " + insecureContentStatus.displayedMixedContent + '\n';
+    insecureContentStatusElem.textContent += "Contained Mixed Form: " + insecureContentStatus.containedMixedForm + '\n';
+    insecureContentStatusElem.textContent += "Ran Content With Certificate Errors (e.g. scripts): " + insecureContentStatus.ranContentWithCertErrors + '\n';
+    insecureContentStatusElem.textContent += "Displayed Content With Certificate Errors (e.g. images): " + insecureContentStatus.displayedContentWithCertErrors + '\n';
+    insecureContentStatusElem.textContent += "State of page if insecure content is run: " + insecureContentStatus.ranInsecureContentStyle + '\n';
+    insecureContentStatusElem.textContent += "State of page if insecure content is displayed: " + insecureContentStatus.displayedInsecureContentStyle + '\n';
+    div.appendChild(insecureContentStatusElem);
+  }
   //console.log("Security state changed");
   //console.log(params);
 }
@@ -579,7 +774,6 @@ function processInputSelector(nodeIdResults)
   }
 
   let nodeIds = nodeIdResults.nodeIds;
-  // Reset the presence of a password field
 
   for (let id in nodeIds)
   {
@@ -593,9 +787,32 @@ function processInputSelector(nodeIdResults)
         console.log(chrome.runtime.lastError.message);
         return;
       }
+
+      chrome.debugger.sendCommand({tabId:tabId}, "DOM.describeNode", {"nodeId": nodeId}, function(object)
+      {
+        if (chrome.runtime.lastError)
+        {
+          console.log(chrome.runtime.lastError.message);
+          return;
+        }
+        let node = object.node;
+        console.dir(node.attributes);
+        if (node && node.attributes && node.attributes.length > 0)
+        {
+          // Stored as name1,value1,name2,value2, etc
+          for (let i = 0; i < node.attributes.length - 1; i +=2)
+          {
+            if (node.attributes[i] === "type" && node.attributes[i+1] === "password")
+            {
+              document.getElementById("passwordPresent").removeAttribute("hidden");
+            }
+          }
+        }
+      });
+
       let item = object.object;
 
-      if (item.description.indexOf("pass") !== -1)
+      if (item.description.indexOf("pass") !== -1 || item.type === "password")
       {
         document.getElementById("passwordPresent").removeAttribute("hidden");
         //console.log("Password input detected");
