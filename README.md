@@ -6,8 +6,9 @@ System resource usage is not per tab so visiting multiple tabs at the same time 
 ## Functionality
 
 ### CPU usage monitoring
-Monitors cumulative user, kernel and idle CPU usage time for each processor, works out the difference between measurements and translates this into a percentage. Greater than 70% user usage is considered worth a warning since the site may be
+* Monitors cumulative user, kernel and idle CPU usage time for each processor, works out the difference between measurements and translates this into a percentage. Greater than 70% user usage is considered worth a warning since the site may be
 mining cryptocurrency on the user's computer.
+* Percentages are displayed to the user for each core.
 
 ### Request Processing
 
@@ -17,7 +18,7 @@ mining cryptocurrency on the user's computer.
 
 * The URL is also checked to see if it contains a port. This is deemed suspicious.
 
-* The domain is checked for suspicious separators ('-' and '.'), if the count is greater than a certain number then the domain is flagged as a potential phishing URL.
+* The domain is checked for suspicious separators ('-' and '.'), if the count is greater than a certain number (currently 5) then the domain is flagged as a potential phishing URL.
 
 * The URL is checked for any special characters (such as '<', '>', '@' for example) and if any are found then it is deemed suspicious.
 
@@ -28,10 +29,21 @@ mining cryptocurrency on the user's computer.
 
 * The status of the response is examined. If the status is a 3XX code then it is flagged as a redirect. If it is a 500 code then this is also flagged.
 
-* When a redirect is received, this is flagged to the user with the status code and the URLs that are being directed from and to.
+* When a redirect is received, this is flagged to the user with the status code and the URLs that are being directed from and to. Severity is increased if the redirect changes domain. The number of redirects is also kept track of since a high number can be suspicious.
 
 ### Static Analysis
-Looks for:
+In scripts it looks for:
 *  "chrome.webstore.install" which indicates an extension will be installed.
 * "document.location" functions which indicates a possible redirection
 * Presence of "exec" and "unescape" (Although this is not currently shown in the results yet #ToDo)
+
+In the document (on every time it is refreshed):
+* Finds all inputs on the page and checks for any of type "password" and if any are found a warning is issued that the page may ask for password input.
+* Also checks description of input nodes for "pass" to find password inputs.
+
+### Dynamic Analysis
+* "Chrome.webstore.install" is hooked and when called a warning will be displayed that the page is trying to install an extension and relevant information is displayed such as where the install originated from and what the URL is of the install.
+
+* When a download starts a warning is displayed and and known details are displayed with it. The URL which initiated the download is displayed and any suspicious details are shown (which are automatically detected by the Chrome browser).
+
+* The "security state" of the page is monitored and displayed to the user and is updated on any change. This includes information on whether the page is loaded over a secure conenction, whether there is mixed content and any explanations about why the site may not be secure.
