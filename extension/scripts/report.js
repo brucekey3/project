@@ -3,13 +3,16 @@ let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
 
+
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
       // Only listen to messages for this tab
-      if (sender.tab.id != tabId)
+
+      if (sender.tab && sender.tab.id != tabId)
       {
         return;
       }
+
       if (request.message === "extensionInstallStarted") {
         let extensionReport = [];
         let details = request.data;
@@ -29,8 +32,14 @@ chrome.runtime.onMessage.addListener(
           container.addPathnameReport(details.iniatiatorUrl, extensionReport);
         }
       }
+      else if (request.message === "formsProcessed")
+      {
+        console.log("forms processed");
+        console.dir(request.data);
+      }
   }
 );
+
 
 function beginAnalysis()
 {
@@ -59,6 +68,7 @@ function beginAnalysis()
       // Give the page some time to load
       window.setTimeout(monitorCpuUsage.bind(null, 0), 100)
     });
+
   });
 
 }
@@ -302,6 +312,8 @@ function processRedirect(details) {
   reportObj.addPathnameReport(urlBeforeRedirect, report);
 }
 
+
+
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
@@ -327,8 +339,20 @@ function onEvent(debuggeeId, message, params) {
       }
       //console.log(root.root);
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
-
+      chrome.tabs.sendMessage(tabId, {message: "checkForms"},
+       function(response) {
+         console.log("message sent");
+       });
+      //chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "form"}, processFormSelector);
     });
+  }
+  else if (message === "DOM.setChildNodes")
+  {
+    if (formIds[params.parentId] )
+    {
+      console.log("setChildNodes");
+      console.dir(params);
+    }
   }
   else if (message == "Security.securityStateChanged")
   {
@@ -760,6 +784,30 @@ function safeCheckCallback(url, matches)
     addSafeBrowsingReport(matches);
   }
 }
+let formIds = {};
+function processFormSelector(nodeIdResults)
+{
+  if (chrome.runtime.lastError)
+  {
+    console.log(chrome.runtime.lastError.message);
+    return;
+  }
+  else if (!nodeIdResults)
+  {
+    console.log("processFormSelector called with undefined object");
+    return;
+  }
+  let nodeIds = nodeIdResults.nodeIds;
+  console.log("ids");
+  console.dir(nodeIds);
+  for (nodeId of nodeIds)
+  {
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getOuterHTML", {nodeId: nodeId}, function (outerHTML) {
+      console.log(outerHTML);
+    });
+    formIds[nodeId] = true;
+  }
+}
 
 function processInputSelector(nodeIdResults)
 {
@@ -767,7 +815,8 @@ function processInputSelector(nodeIdResults)
   {
     console.log(chrome.runtime.lastError.message);
     return;
-  } else  if (!nodeIdResults)
+  }
+  else  if (!nodeIdResults)
   {
     console.log("processInputSelector called with undefined object");
     return;
@@ -775,10 +824,49 @@ function processInputSelector(nodeIdResults)
 
   let nodeIds = nodeIdResults.nodeIds;
 
-  for (let id in nodeIds)
+  for (let index in nodeIds)
   {
-    let nodeId = nodeIds[id];
-    //console.log(nodeId);
+    let nodeId = nodeIds[index];
+    //console.dir(nodeId);
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.describeNode", {"nodeId": nodeId}, function(object) {
+      if (chrome.runtime.lastError)
+      {
+        console.log(chrome.runtime.lastError.message);
+        return;
+      }
+      let shouldBeFilled = false;
+      let node = object.node;
+
+      if (node && node.attributes && node.attributes.length > 0)
+      {
+        // Stored as name1,value1,name2,value2, etc
+        for (let i = 0; i < node.attributes.length - 1; i +=2)
+        {
+          if (node.attributes[i] === "type" && node.attributes[i+1] === "password")
+          {
+            document.getElementById("passwordPresent").removeAttribute("hidden");
+          }
+
+          if (node.attributes[i] === "type"
+          && (node.attributes[i+1] !== "hidden" && node.attributes[i+1] !== "submit")
+          )
+          {
+            shouldBeFilled = true;
+          }
+        }
+
+        /*
+        if (shouldBeFilled)
+        {
+          console.dir(nodeId);
+          chrome.debugger.sendCommand({tabId:tabId},
+            "DOM.setAttributeValue",
+            {"nodeId": nodeId, name: "value", value: "Bite me"});
+        }
+        */
+      }
+    });
+
     document.getElementById("passwordPresent").setAttribute("hidden", '');
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.resolveNode", {"nodeId": nodeId}, function(object)
     {
@@ -788,36 +876,14 @@ function processInputSelector(nodeIdResults)
         return;
       }
 
-      chrome.debugger.sendCommand({tabId:tabId}, "DOM.describeNode", {"nodeId": nodeId}, function(object)
-      {
-        if (chrome.runtime.lastError)
-        {
-          console.log(chrome.runtime.lastError.message);
-          return;
-        }
-        let node = object.node;
-        console.dir(node.attributes);
-        if (node && node.attributes && node.attributes.length > 0)
-        {
-          // Stored as name1,value1,name2,value2, etc
-          for (let i = 0; i < node.attributes.length - 1; i +=2)
-          {
-            if (node.attributes[i] === "type" && node.attributes[i+1] === "password")
-            {
-              document.getElementById("passwordPresent").removeAttribute("hidden");
-            }
-          }
-        }
-      });
-
       let item = object.object;
-
       if (item.description.indexOf("pass") !== -1 || item.type === "password")
       {
         document.getElementById("passwordPresent").removeAttribute("hidden");
         //console.log("Password input detected");
       }
     });
+
   }
 }
 

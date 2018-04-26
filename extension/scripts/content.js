@@ -8,11 +8,13 @@ document.addEventListener("hookEvent", function(data) {
   // Pass the custom message that's passed in through the event
   chrome.runtime.sendMessage({
     message: data.detail.message,
-    data: data.detail.detail
+    data: data.detail.data
   });
 });
 
+
 function onLoad(e) {
+
   chrome.runtime.sendMessage({
       "message": "hasLoaded"
   });
@@ -20,10 +22,32 @@ function onLoad(e) {
   chrome.runtime.sendMessage({"message": "getExtensionId"} ,
    function(response)
    {
+     if (!response)
+     {
+       return;
+     }
      let extensionId = response.extensionId;
      injectChromeWebstoreInstallHook(extensionId);
    });
 
+   for (form of document.forms)
+   {
+     for (field of form)
+     {
+       console.dir(field);
+       if (field.type && field.type !== "hidden" && field.type !== "submit")
+       {
+         field.value = "Hello";
+       }
+     }
+     //form.submit();
+     let detailObj  = {
+       testValue: "yep"
+     };
+     let event = new CustomEvent('Event', {detail: {message: "formsProcessed", data: detailObj}});
+     event.initEvent('hookEvent');
+     document.dispatchEvent(event);
+   }
 }
 
 function injectChromeWebstoreInstallHook(extensionId)
@@ -35,7 +59,7 @@ function injectChromeWebstoreInstallHook(extensionId)
       let detailObj = {};
       detailObj.webstoreUrl = url;
       detailObj.iniatiatorUrl = document.location.href;
-      let event = new CustomEvent('Event', {detail: {message: "extensionInstallStarted", detail: detailObj}});
+      let event = new CustomEvent('Event', {detail: {message: "extensionInstallStarted", data: detailObj}});
       event.initEvent('hookEvent');
       document.dispatchEvent(event);
       return store(url, onSuccess, onFailure);
