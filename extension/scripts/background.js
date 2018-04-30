@@ -72,13 +72,20 @@ chrome.runtime.onMessage.addListener(
         "data": request.data
       });
     }
-    else if (request.message ===  "formsProcessed")
+    else if (request.message ===  "formProcessed")
     {
       let tabId = sender.tab.id;
       console.log("Content message received: " + request.data);
       chrome.tabs.sendMessage(tabId, {
-        "message": "formsProcessed",
+        "message": "formProcessed",
         "data": request.data
+      });
+    }
+    else if (request.message === "checkForms")
+    {
+      console.log("Content message received checkForms");
+      chrome.tabs.sendMessage(request.tabId, {
+        "message": "checkForms",
       });
     }
 

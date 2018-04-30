@@ -1,7 +1,7 @@
 {
-  "name": "Hello World!",
+  "name": "Honey Browser",
   "version": "1.0",
-  "description": "My first Chrome extension.",
+  "description": "Analyses the page",
   "manifest_version": 2,
   "browser_action": {
     "default_icon": "images/icon.png",
@@ -17,7 +17,9 @@
         "<all_urls>"
       ],
       "all_frames": true,
-      "js": ["jquery-3.2.1.js", "scripts/content.js"]
+      "js": ["jquery-3.2.1.js",
+             "scripts/content.js"
+            ]
     }
   ],
   "permissions": [
@@ -29,6 +31,7 @@
     "system",
     "system.cpu",
     "downloads",
-    "management"
+    "management",
+    "activeTab"
   ]
 }

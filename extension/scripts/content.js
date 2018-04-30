@@ -2,6 +2,11 @@
 
 window.addEventListener ("load", onLoad, false);
 
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  //alert(request);
+  console.dir(request);
+});
+
 document.addEventListener("hookEvent", function(data) {
   console.log("triggered!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
   console.dir(data);
@@ -12,9 +17,8 @@ document.addEventListener("hookEvent", function(data) {
   });
 });
 
-
 function onLoad(e) {
-
+  document.honeyBrowserEvent = {};
   chrome.runtime.sendMessage({
       "message": "hasLoaded"
   });
@@ -30,24 +34,6 @@ function onLoad(e) {
      injectChromeWebstoreInstallHook(extensionId);
    });
 
-   for (form of document.forms)
-   {
-     for (field of form)
-     {
-       console.dir(field);
-       if (field.type && field.type !== "hidden" && field.type !== "submit")
-       {
-         field.value = "Hello";
-       }
-     }
-     //form.submit();
-     let detailObj  = {
-       testValue: "yep"
-     };
-     let event = new CustomEvent('Event', {detail: {message: "formsProcessed", data: detailObj}});
-     event.initEvent('hookEvent');
-     document.dispatchEvent(event);
-   }
 }
 
 function injectChromeWebstoreInstallHook(extensionId)
@@ -59,9 +45,12 @@ function injectChromeWebstoreInstallHook(extensionId)
       let detailObj = {};
       detailObj.webstoreUrl = url;
       detailObj.iniatiatorUrl = document.location.href;
-      let event = new CustomEvent('Event', {detail: {message: "extensionInstallStarted", data: detailObj}});
-      event.initEvent('hookEvent');
-      document.dispatchEvent(event);
+      document.honeyBrowserEvent = new CustomEvent('Event', {detail: {
+        message: "extensionInstallStarted",
+        data: detailObj
+      }});
+      document.honeyBrowserEvent.initEvent('hookEvent');
+      document.dispatchEvent(document.honeyBrowserEvent);
       return store(url, onSuccess, onFailure);
     };
   };
@@ -76,3 +65,5 @@ function injectFunction(functionToInject, extensionId)
   (document.head||document.documentElement).appendChild(script);
   script.remove();
 }
+
+onLoad();

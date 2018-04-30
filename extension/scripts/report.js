@@ -1,4 +1,6 @@
 let tabId = parseInt(window.location.search.substring(1));
+// let extensionId = window.location.host;
+
 let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
@@ -32,10 +34,18 @@ chrome.runtime.onMessage.addListener(
           container.addPathnameReport(details.iniatiatorUrl, extensionReport);
         }
       }
-      else if (request.message === "formsProcessed")
+      else if (request.message === "formProcessed")
       {
-        console.log("forms processed");
-        console.dir(request.data);
+        console.log("form processed");
+        console.dir(request);
+        // note, work is now done in processRedirect
+        /*
+        let response = request.data.response;
+        let report = [];
+
+        let container = getDomainReportContainer(response.url);
+        container.addDomainReport(report, "formResult");
+        */
       }
   }
 );
@@ -277,7 +287,7 @@ function processPerformanceMetrics(result)
 
 let responses = {};
 
-chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, []);
+chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
 chrome.webRequest.onResponseStarted.addListener(processResponse, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 
@@ -286,13 +296,13 @@ function processRedirect(details) {
   let urlBeforeRedirect = details.url;
   let status = details.statusCode;
   let urlAfterRedirect = details.redirectUrl;
-
   let reportObj = getDomainReportContainer(urlBeforeRedirect);
-
   let severity = SeverityEnum.UNKNOWN;
-
+  let report = [];
   let beforeDomain = decomposeUrl(urlBeforeRedirect).hostname;
   let afterDomain = decomposeUrl(urlAfterRedirect).hostname;
+
+
   if (beforeDomain != afterDomain)
   {
     severity = SeverityEnum.MILD;
@@ -302,14 +312,32 @@ function processRedirect(details) {
     severity = SeverityEnum.LOW;
   }
 
-  numRedirects += 1;
-  document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
-
   let reportText = urlBeforeRedirect + " status " + status + " redirecting to: "
                  + urlAfterRedirect;
-  let report = [];
-  report.push(generateReport(reportText, severity));
-  reportObj.addPathnameReport(urlBeforeRedirect, report);
+  // If the request was initated by the analyseForms script then handle this
+  // separately
+  // This will, however, ignore redirects caused by other extensions until I
+  // have a fixed ID to locate
+  console.dir(details.responseHeaders);
+  if (details.initiator === document.location.origin)
+  {
+    let domainReport = [];
+    let reportString = "Redirected from a test form submission with false credentials -"
+                     + " This may be phishing!";
+    domainReport.push(generateReport(reportString, severity));
+    domainReport.push(generateReport(reportText, severity));
+    reportObj.addDomainReport(domainReport, "phishingWarning");
+  }
+  else
+  {
+    numRedirects += 1;
+    document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+
+    report.push(generateReport(reportText, severity));
+    reportObj.addPathnameReport(urlBeforeRedirect, report);
+  }
+
+
 }
 
 
@@ -339,11 +367,12 @@ function onEvent(debuggeeId, message, params) {
       }
       //console.log(root.root);
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
-      chrome.tabs.sendMessage(tabId, {message: "checkForms"},
-       function(response) {
-         console.log("message sent");
-       });
-      //chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "form"}, processFormSelector);
+
+    });
+
+    chrome.tabs.executeScript(tabId, {
+          file: 'scripts/analyseForms.js',
+          allFrames: true,
     });
   }
   else if (message === "DOM.setChildNodes")
