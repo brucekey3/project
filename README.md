@@ -47,3 +47,7 @@ In the document (on every time it is refreshed):
 * When a download starts a warning is displayed and and known details are displayed with it. The URL which initiated the download is displayed and any suspicious details are shown (which are automatically detected by the Chrome browser).
 
 * The "security state" of the page is monitored and displayed to the user and is updated on any change. This includes information on whether the page is loaded over a secure conenction, whether there is mixed content and any explanations about why the site may not be secure.
+
+### Anti-Phishing
+* Any forms on the page which are not search forms are filled in with dummy values and submitted. If there is a resulting redirect then a warning is displayed in the report window since this is a sign that the page has perceived the action as successful when it should not have been. Benign pages normally respond with 200 OK and display errors on the page but will sometimes redirect to another page with a captcha, for example, so this method is not foolproof. At the moment the form filling is limited to 'select' tags and inputs labelled as email and password. Any unknown inputs are labelled with simpler non-specific text.
+An observed method some phishing pages use is to return 200 OK and then have the page itself redirect to a different place which cannot currently be detected by this method.
