@@ -6,18 +6,64 @@ function fillField(field)
   }
   else if (field.tagName.toLowerCase() === "input")
   {
-    if (field.type === "password")
+    // Set as default
+    field.value = "testValue";
+
+    // But if we have more detailed information then use it
+    if (field.type)
     {
-      field.value = "password";
+      if (field.type === "password")
+      {
+        field.value = "password";
+      }
+      else if (field.type === "email")
+      {
+        field.value = "testEmail@domain.com";
+      }
+      else if (field.type === "number")
+      {
+        if (field.min)
+        {
+          field.value = field.min;
+        }
+        else if (field.max)
+        {
+          field.value = field.max;
+        }
+      }
+
+      if (field.placeholder)
+      {
+        let placeholder = field.placeholder.toLowerCase();
+        if (placeholder.indexOf("card") !== -1 && placeholder.indexOf("num") !== -1)
+        {
+          field.value = "4916252669881577";
+        }
+        // Expiry / Expiration
+        else if (placeholder.indexOf("expir") !== -1 || placeholder.indexOf("date") !== -1)
+        {
+          let today = new Date();
+          let year = today.getFullYear() + 2;
+          let month = today.getMonth();
+          field.value = month + "/" + year;
+        }
+        else if (placeholder.indexOf("csc") !== -1)
+        {
+          field.value = 123;
+        }
+        else if (placeholder.indexOf("name") !== -1)
+        {
+          field.value = "Fake Name";
+        }
+        else if (placeholder.indexOf("post") !== -1
+              && placeholder.indexOf("code") !== -1)
+        {
+          field.value = "10012";
+        }
+      }
+
     }
-    else if (field.type === "email")
-    {
-      field.value = "testEmail@domain.com";
-    }
-    else
-    {
-      field.value = "testValue";
-    }
+
   }
 
 }
