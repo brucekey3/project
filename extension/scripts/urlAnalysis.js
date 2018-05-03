@@ -20,9 +20,19 @@ parser.search   => "?search=test"
 parser.hash     => "#hash"
 */
 function decomposeUrl(href) {
+  /*
     var parser = document.createElement("a");
     parser.href = href;
     return parser;
+  */
+  let parser = undefined;
+  try {
+    parser = new URL(href);
+  } catch (e) {
+    parser = new URL("http://" + href);
+  }
+  
+  return parser;
 }
 
 

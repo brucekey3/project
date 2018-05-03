@@ -30,6 +30,7 @@ chrome.runtime.onMessage.addListener(
             reportString = "See extension at: " + details.webstoreUrl;
             extensionReport.push(generateReport(reportString, SeverityEnum.UNKNOWN));
           }
+
           let container = getDomainReportContainer(details.iniatiatorUrl);
           container.addPathnameReport(details.iniatiatorUrl, extensionReport);
         }
@@ -267,6 +268,7 @@ function downloadCreatedCallback(downloadItem)
     downloadReport.push(generateReport("Filename is: " + filename, severity));
   }
 
+
   let container = getDomainReportContainer(beforeRedirects);
   container.addPathnameReport(beforeRedirects, downloadReport);
 }
@@ -296,6 +298,7 @@ function processRedirect(details) {
   let urlBeforeRedirect = details.url;
   let status = details.statusCode;
   let urlAfterRedirect = details.redirectUrl;
+
   let reportObj = getDomainReportContainer(urlBeforeRedirect);
   let severity = SeverityEnum.UNKNOWN;
   let report = [];
@@ -424,7 +427,6 @@ function processInitialResponse(params)
   */
 
 
-  let reportObj = getDomainReportContainer(params.response.url);
 
   if (params.response.securityDetails)
   {
@@ -531,6 +533,13 @@ function processInitialResponse(params)
     securityReport.push(generateReport("Time remaining: " + timeRemaining, endDateSeverity));
     securityReport.push(generateReport("Time since issued: " + issuedAgo, startDateSeverity));
 
+    let reportObj = getDomainReportContainer(params.response.url);
+    if (!reportObj)
+    {
+      console.log("Failed to get report container for: " + params.response.url);
+      console.dir(decomposeUrl(params.response.url));
+      return;
+    }
     reportObj.addDomainReport(securityReport, "CertificateDetails");
   }
 }
@@ -765,7 +774,6 @@ function addSafeBrowsingReport(matches)
 {
   for (match of matches)
   {
-    let url = match.threat.url;
     let safeReport = [];
     switch (match.threatType)
     {
@@ -796,9 +804,17 @@ function addSafeBrowsingReport(matches)
         break;
     }
 
+    let url = match.threat.url;
+    let containerObject = getDomainReportContainer(match.threat.url);
+    if (containerObject)
+    {
+      containerObject.addDomainReport(safeReport, "SafeBrowsing");
+    }
+    else
+    {
+      console.log("SafeBrowsing couldn't add report - no container returned");
+    }
 
-    let containerObject = getDomainReportContainer(url);
-    containerObject.addDomainReport(safeReport, "SafeBrowsing");
     report[url] = containerObject;
   }
 }
@@ -813,6 +829,7 @@ function safeCheckCallback(url, matches)
     addSafeBrowsingReport(matches);
   }
 }
+
 let formIds = {};
 function processFormSelector(nodeIdResults)
 {
@@ -983,6 +1000,7 @@ function processRequest(details)
   {
     return;
   }
+
   let container = getDomainReportContainer(url);
 
   if (urlReport.domain && urlReport.domain.length > 0)
@@ -1005,6 +1023,7 @@ function processResponse(details)
   }
 
   let url = details.url;
+
   let container = getDomainReportContainer(url);
 
   // Status report will be per unique URL i.e. combination of domain and path
@@ -1026,6 +1045,7 @@ function processResponseBody(params)
 
   let details = responses[params.requestId];
   let url = details.response.url;
+
   let container = getDomainReportContainer(url);
   let resourceType = details.type;
   /*
@@ -1162,7 +1182,7 @@ function createUrlReport(url)
 let containers = {};
 
 /*
-  Return the div which corresponds to the report for the given URL.
+  Return the element which corresponds to the report for the given URL.
   If one does not exist then it is created and returned, but NOT added
   to the document.
 */
@@ -1171,16 +1191,28 @@ function getDomainReportContainer(url)
   let parser = decomposeUrl(url);
   let domain = parser.hostname;
 
-  // If it already exists then return the existing one
-  let domainReportChildObj = containers[domain]; //document.getElementById(domain);
-  if (domainReportChildObj)
+  // Ignore things from ourself and things which aren't URLs
+  if (domain === document.location.hostname || parser.protocol = "data:")
   {
-    return domainReportChildObj;
+    return;
   }
 
-  // If it does not already exist then build a new one
-  domainReportChildObj = new DomainContainer();
-  domainReportChildObj.buildDomainContainer(domain);
+  // If it already exists then return the existing one
+  let domainReportChildObj = containers[domain];
 
+  if (!domainReportChildObj)
+  {
+    // If it does not already exist then build a new one
+    domainReportChildObj = new DomainContainer();
+    let elem = domainReportChildObj.buildDomainContainer(domain);
+    if (!elem)
+    {
+      console.log("failed to create domain report container for: " + url);
+      return;
+    }
+    document.getElementById("urlReports").appendChild(elem);
+    containers[domain] = domainReportChildObj;
+  }
   return domainReportChildObj;
+
 }

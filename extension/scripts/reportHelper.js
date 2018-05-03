@@ -145,6 +145,10 @@ class DomainContainer
 
   buildDomainContainer(domain)
   {
+    if (domain == "")
+    {
+      return undefined;
+    }
     // Set the domain of this class
     this.domain = domain;
 
