@@ -32,7 +32,7 @@ chrome.runtime.onMessage.addListener(
           }
 
           let container = getDomainReportContainer(details.iniatiatorUrl);
-          container.addPathnameReport(details.iniatiatorUrl, extensionReport);
+          container.addPathnameReport(details.iniatiatorUrl, extensionReport, "Extension Install");
         }
       }
       else if (request.message === "formProcessed")
@@ -40,13 +40,23 @@ chrome.runtime.onMessage.addListener(
         console.log("form processed");
         console.dir(request);
         // note, work is now done in processRedirect
-        /*
+
         let response = request.data.response;
+        let analysis = static_analysis(response.body);
+        console.dir(analysis);
         let report = [];
+
+        if (!response.redirected && analysis.possibleRedirects > 0)
+        {
+          let reportText = "Possible redirect found from non-redirect response"
+                         + " from form submission with fake credentials"
+                         + " - This may be phishing.";
+          report.push(reportText, SeverityEnum.MILD);
+        }
 
         let container = getDomainReportContainer(response.url);
         container.addDomainReport(report, "formResult");
-        */
+
       }
   }
 );
@@ -1192,7 +1202,7 @@ function getDomainReportContainer(url)
   let domain = parser.hostname;
 
   // Ignore things from ourself and things which aren't URLs
-  if (domain === document.location.hostname || parser.protocol = "data:")
+  if (domain === document.location.hostname || parser.protocol === "data:")
   {
     return;
   }
@@ -1210,7 +1220,7 @@ function getDomainReportContainer(url)
       console.log("failed to create domain report container for: " + url);
       return;
     }
-    document.getElementById("urlReports").appendChild(elem);
+    //document.getElementById("urlReports").appendChild(elem);
     containers[domain] = domainReportChildObj;
   }
   return domainReportChildObj;

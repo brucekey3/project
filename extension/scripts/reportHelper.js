@@ -14,10 +14,11 @@ function generateReport(text, severity)
 
 function generateChildren(parent, report, label)
 {
+
   let container = document.createElement("div");
   if (label)
   {
-    container.innerHTML = "<u>" + label + "</u></br>";
+    container.innerHTML = "<h4><u>" + label + "</u></h4></br>";
     let id = parent.id + label;
     let elem = document.getElementById(id);
     if (elem)
@@ -129,6 +130,7 @@ class PathnameContainer
 
   addPathnameReport(report, label)
   {
+
     this.pathnameContainer = generateChildren(this.pathnameContainer, report, label);
   }
 }
@@ -200,11 +202,13 @@ class DomainContainer
     }
 
     let reportContainer = document.getElementById("report_" + this.domain);
+
     reportContainer = generateChildren(reportContainer, domainReport, label);
   }
 
   addPathnameReport(url, pathnameReport, label)
   {
+
     if (!this.domainContainer || !this.domain)
     {
       console.log("Build container before adding pathnames");
@@ -233,7 +237,7 @@ class DomainContainer
     // If there is no pathname add it as a domain report instead
     if (pathname === "" || pathname === "/")
     {
-      this.addDomainReport(pathnameReport);
+      this.addDomainReport(pathnameReport, label);
       return;
     }
 
@@ -249,6 +253,7 @@ class DomainContainer
 
     let pathnameContainerObj = new PathnameContainer();
     pathnameContainerObj.buildPathnameContainer(pathname);
+
     pathnameContainerObj.addPathnameReport(pathnameReport, label);
     let pathnamesContainer = document.getElementById("pathnames" + this.domain);
     if (!pathnamesContainer)

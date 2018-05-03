@@ -317,19 +317,47 @@ function fillForm(form)
 // Used for XMLHttpRequest onreadystatechange
 function analyseFormSubmissionResponse(response, URL)
 {
-    console.dir(response);
-    chrome.runtime.sendMessage({
-      message: "formProcessed",
-      data: {
-        response: {
-          status: response.status,
-          redirected: response.redirected,
-          url: response.url,
-          body: response.body,
-          iniatiatorUrl: URL
-        }
-      }
-    });
+  let translatedBody = "";
+  const reader = response.body.getReader();
+  const stream = new ReadableStream({
+    start(controller) {
+      // The following function handles each data chunk
+      function push() {
+        // "done" is a Boolean and value a "Uint8Array"
+        reader.read().then(({ done, value }) => {
+          // Is there no more data to read?
+          if (done) {
+            // Tell the browser that we have finished sending data
+            controller.close();
+            console.dir(response);
+            chrome.runtime.sendMessage({
+              message: "formProcessed",
+              data: {
+                response: {
+                  status: response.status,
+                  redirected: response.redirected,
+                  url: response.url,
+                  body: translatedBody,
+                  iniatiatorUrl: URL
+                }
+              }
+            });
+            return;
+          }
+          else {
+            translatedBody += new TextDecoder("utf-8").decode(value);
+          }
+
+          // Get the data and send it to the browser via the controller
+          controller.enqueue(value);
+          push();
+        });
+      };
+
+      push();
+    }
+  });
+
 }
 
 function submitFormAndSendResults(form)
