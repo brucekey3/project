@@ -26,6 +26,10 @@ var dataGenerator = {
   csc: 123,
   name: "Fake Name",
   username: "FakeUser",
+  address: "12 FakeStreet",
+  city: "FakeCity",
+  state: "Ohio",
+  county: "London",
   postCode: "BN24 6RB",
   zipCode: "10012"
 }
@@ -87,7 +91,8 @@ function bruteForceGuess(field)
         winningVotes = votes[choice];
       }
     }
-    else if (name.indexOf("csc") !== -1 || value.indexOf("csc") !== -1)
+    else if ((name.indexOf("csc") !== -1 || value.indexOf("csc") !== -1)
+          || (name.indexOf("cvv") !== -1 || value.indexOf("cvv") !== -1))
     {
       //field.value = 123;
       let choice = "csc";
@@ -157,6 +162,78 @@ function bruteForceGuess(field)
   }
 }
 
+function placeholderGuess(field)
+{
+  if (!field.placeholder)
+  {
+    bruteForceGuess(field);
+    return;
+  }
+
+  let placeholder = field.placeholder.toLowerCase();
+
+  if (placeholder.indexOf("card") !== -1 && placeholder.indexOf("num") !== -1)
+  {
+    field.value = dataGenerator["cardnumber"];
+  }
+  // Expiry / Expiration
+  else if (placeholder.indexOf("expir") !== -1 || placeholder.indexOf("date") !== -1)
+  {
+    field.value = dataGenerator["expiryDate"];
+  }
+  else if (placeholder.indexOf("csc") !== -1
+        || placeholder.indexOf("cvv") !== -1)
+  {
+    field.value = dataGenerator["csc"];
+  }
+  else if (placeholder.indexOf("name") !== -1)
+  {
+    if (placeholder.indexOf("user") !== -1 )
+    {
+      field.value = dataGenerator["username"];
+    }
+    else
+    {
+      field.value = dataGenerator["name"];
+    }
+  }
+  else if (placeholder.indexOf("code") !== -1)
+  {
+    if (placeholder.indexOf("post") !== -1)
+    {
+      field.value = dataGenerator["postCode"];
+    }
+    else
+    {
+      field.value = dataGenerator["zipCode"];
+    }
+  }
+  else if (placeholder.indexOf("mail") !== -1)
+  {
+    field.value = dataGenerator["email"];
+  }
+  else if (placeholder.indexOf("address") !== -1)
+  {
+    field.value = dataGenerator["address"];
+  }
+  else if (placeholder.indexOf("city") !== -1)
+  {
+    field.value = dataGenerator["city"];
+  }
+  else if (placeholder.indexOf("state") !== -1)
+  {
+    field.value = dataGenerator["state"];
+  }
+  else if (placeholder.indexOf("county") !== -1)
+  {
+    field.value = dataGenerator["county"];
+  }
+  else
+  {
+    bruteForceGuess(field);
+  }
+}
+
 function fillText(field)
 {
   // If we know what it is then be precise, otherwise just guess
@@ -166,9 +243,13 @@ function fillText(field)
     {
       field.value = dataGenerator["password"];
     }
-    else if (field.type && field.type === "email")
+    else if (field.type === "email")
     {
       field.value = dataGenerator["email"];
+    }
+    else if (field.type === "text")
+    {
+      placeholderGuess(field);
     }
     else
     {
@@ -177,53 +258,7 @@ function fillText(field)
   }
   else if (field.placeholder)
   {
-    let placeholder = field.placeholder.toLowerCase();
-
-    if (placeholder.indexOf("card") !== -1 && placeholder.indexOf("num") !== -1)
-    {
-      field.value = dataGenerator["cardnumber"];
-    }
-    // Expiry / Expiration
-    else if (placeholder.indexOf("expir") !== -1 || placeholder.indexOf("date") !== -1)
-    {
-      field.value = dataGenerator["expiryDate"];
-    }
-    else if (placeholder.indexOf("csc") !== -1)
-    {
-      field.value = dataGenerator["csc"];
-    }
-    else if (placeholder.indexOf("name") !== -1)
-    {
-      if (placeholder.indexOf("user") !== -1 )
-      {
-        field.value = dataGenerator["username"];
-      }
-      else
-      {
-        field.value = dataGenerator["name"];
-      }
-    }
-    else if (placeholder.indexOf("code") !== -1)
-    {
-      if (placeholder.indexOf("post") !== -1)
-      {
-        field.value = dataGenerator["postCode"];
-      }
-      else
-      {
-        field.value = dataGenerator["zipCode"];
-      }
-    }
-    else if (placeholder.indexOf("mail") !== -1)
-    {
-      field.value = dataGenerator["email"];
-    }
-    else
-    {
-      bruteForceGuess(field);
-    }
-
-
+    placeholderGuess(field);
   }
   else
   {
