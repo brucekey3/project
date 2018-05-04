@@ -1,15 +1,20 @@
 let tabId = parseInt(window.location.search.substring(1));
+// let extensionId = window.location.host;
+
 let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
 
+
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
       // Only listen to messages for this tab
-      if (sender.tab.id != tabId)
+
+      if (sender.tab && sender.tab.id != tabId)
       {
         return;
       }
+
       if (request.message === "extensionInstallStarted") {
         let extensionReport = [];
         let details = request.data;
@@ -25,12 +30,37 @@ chrome.runtime.onMessage.addListener(
             reportString = "See extension at: " + details.webstoreUrl;
             extensionReport.push(generateReport(reportString, SeverityEnum.UNKNOWN));
           }
+
           let container = getDomainReportContainer(details.iniatiatorUrl);
-          container.addPathnameReport(details.iniatiatorUrl, extensionReport);
+          container.addPathnameReport(details.iniatiatorUrl, extensionReport, "Extension Install");
         }
+      }
+      else if (request.message === "formProcessed")
+      {
+        console.log("form processed");
+        console.dir(request);
+        // note, work is now done in processRedirect
+
+        let response = request.data.response;
+        let analysis = static_analysis(response.body);
+        console.dir(analysis);
+        let report = [];
+
+        if (!response.redirected && analysis.possibleRedirects > 0)
+        {
+          let reportText = "Possible redirect found from non-redirect response"
+                         + " from form submission with fake credentials"
+                         + " - This may be phishing.";
+          report.push(reportText, SeverityEnum.MILD);
+        }
+
+        let container = getDomainReportContainer(response.url);
+        container.addDomainReport(report, "formResult");
+
       }
   }
 );
+
 
 function beginAnalysis()
 {
@@ -59,6 +89,7 @@ function beginAnalysis()
       // Give the page some time to load
       window.setTimeout(monitorCpuUsage.bind(null, 0), 100)
     });
+
   });
 
 }
@@ -247,6 +278,7 @@ function downloadCreatedCallback(downloadItem)
     downloadReport.push(generateReport("Filename is: " + filename, severity));
   }
 
+
   let container = getDomainReportContainer(beforeRedirects);
   container.addPathnameReport(beforeRedirects, downloadReport);
 }
@@ -267,7 +299,7 @@ function processPerformanceMetrics(result)
 
 let responses = {};
 
-chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, []);
+chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
 chrome.webRequest.onResponseStarted.addListener(processResponse, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 
@@ -278,11 +310,12 @@ function processRedirect(details) {
   let urlAfterRedirect = details.redirectUrl;
 
   let reportObj = getDomainReportContainer(urlBeforeRedirect);
-
   let severity = SeverityEnum.UNKNOWN;
-
+  let report = [];
   let beforeDomain = decomposeUrl(urlBeforeRedirect).hostname;
   let afterDomain = decomposeUrl(urlAfterRedirect).hostname;
+
+
   if (beforeDomain != afterDomain)
   {
     severity = SeverityEnum.MILD;
@@ -292,15 +325,35 @@ function processRedirect(details) {
     severity = SeverityEnum.LOW;
   }
 
-  numRedirects += 1;
-  document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
-
   let reportText = urlBeforeRedirect + " status " + status + " redirecting to: "
                  + urlAfterRedirect;
-  let report = [];
-  report.push(generateReport(reportText, severity));
-  reportObj.addPathnameReport(urlBeforeRedirect, report);
+  // If the request was initated by the analyseForms script then handle this
+  // separately
+  // This will, however, ignore redirects caused by other extensions until I
+  // have a fixed ID to locate
+  console.dir(details.responseHeaders);
+  if (details.initiator === document.location.origin)
+  {
+    let domainReport = [];
+    let reportString = "Redirected from a test form submission with false credentials -"
+                     + " This may be phishing!";
+    domainReport.push(generateReport(reportString, severity));
+    domainReport.push(generateReport(reportText, severity));
+    reportObj.addDomainReport(domainReport, "phishingWarning");
+  }
+  else
+  {
+    numRedirects += 1;
+    document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+
+    report.push(generateReport(reportText, severity));
+    reportObj.addPathnameReport(urlBeforeRedirect, report);
+  }
+
+
 }
+
+
 
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
@@ -329,6 +382,19 @@ function onEvent(debuggeeId, message, params) {
       chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
     });
+
+    chrome.tabs.executeScript(tabId, {
+          file: 'scripts/analyseForms.js',
+          allFrames: true,
+    });
+  }
+  else if (message === "DOM.setChildNodes")
+  {
+    if (formIds[params.parentId] )
+    {
+      console.log("setChildNodes");
+      console.dir(params);
+    }
   }
   else if (message == "Security.securityStateChanged")
   {
@@ -371,7 +437,6 @@ function processInitialResponse(params)
   */
 
 
-  let reportObj = getDomainReportContainer(params.response.url);
 
   if (params.response.securityDetails)
   {
@@ -478,6 +543,13 @@ function processInitialResponse(params)
     securityReport.push(generateReport("Time remaining: " + timeRemaining, endDateSeverity));
     securityReport.push(generateReport("Time since issued: " + issuedAgo, startDateSeverity));
 
+    let reportObj = getDomainReportContainer(params.response.url);
+    if (!reportObj)
+    {
+      console.log("Failed to get report container for: " + params.response.url);
+      console.dir(decomposeUrl(params.response.url));
+      return;
+    }
     reportObj.addDomainReport(securityReport, "CertificateDetails");
   }
 }
@@ -712,7 +784,6 @@ function addSafeBrowsingReport(matches)
 {
   for (match of matches)
   {
-    let url = match.threat.url;
     let safeReport = [];
     switch (match.threatType)
     {
@@ -743,9 +814,17 @@ function addSafeBrowsingReport(matches)
         break;
     }
 
+    let url = match.threat.url;
+    let containerObject = getDomainReportContainer(match.threat.url);
+    if (containerObject)
+    {
+      containerObject.addDomainReport(safeReport, "SafeBrowsing");
+    }
+    else
+    {
+      console.log("SafeBrowsing couldn't add report - no container returned");
+    }
 
-    let containerObject = getDomainReportContainer(url);
-    containerObject.addDomainReport(safeReport, "SafeBrowsing");
     report[url] = containerObject;
   }
 }
@@ -761,13 +840,39 @@ function safeCheckCallback(url, matches)
   }
 }
 
+let formIds = {};
+function processFormSelector(nodeIdResults)
+{
+  if (chrome.runtime.lastError)
+  {
+    console.log(chrome.runtime.lastError.message);
+    return;
+  }
+  else if (!nodeIdResults)
+  {
+    console.log("processFormSelector called with undefined object");
+    return;
+  }
+  let nodeIds = nodeIdResults.nodeIds;
+  console.log("ids");
+  console.dir(nodeIds);
+  for (nodeId of nodeIds)
+  {
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getOuterHTML", {nodeId: nodeId}, function (outerHTML) {
+      console.log(outerHTML);
+    });
+    formIds[nodeId] = true;
+  }
+}
+
 function processInputSelector(nodeIdResults)
 {
   if (chrome.runtime.lastError)
   {
     console.log(chrome.runtime.lastError.message);
     return;
-  } else  if (!nodeIdResults)
+  }
+  else  if (!nodeIdResults)
   {
     console.log("processInputSelector called with undefined object");
     return;
@@ -775,10 +880,49 @@ function processInputSelector(nodeIdResults)
 
   let nodeIds = nodeIdResults.nodeIds;
 
-  for (let id in nodeIds)
+  for (let index in nodeIds)
   {
-    let nodeId = nodeIds[id];
-    //console.log(nodeId);
+    let nodeId = nodeIds[index];
+    //console.dir(nodeId);
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.describeNode", {"nodeId": nodeId}, function(object) {
+      if (chrome.runtime.lastError)
+      {
+        console.log(chrome.runtime.lastError.message);
+        return;
+      }
+      let shouldBeFilled = false;
+      let node = object.node;
+
+      if (node && node.attributes && node.attributes.length > 0)
+      {
+        // Stored as name1,value1,name2,value2, etc
+        for (let i = 0; i < node.attributes.length - 1; i +=2)
+        {
+          if (node.attributes[i] === "type" && node.attributes[i+1] === "password")
+          {
+            document.getElementById("passwordPresent").removeAttribute("hidden");
+          }
+
+          if (node.attributes[i] === "type"
+          && (node.attributes[i+1] !== "hidden" && node.attributes[i+1] !== "submit")
+          )
+          {
+            shouldBeFilled = true;
+          }
+        }
+
+        /*
+        if (shouldBeFilled)
+        {
+          console.dir(nodeId);
+          chrome.debugger.sendCommand({tabId:tabId},
+            "DOM.setAttributeValue",
+            {"nodeId": nodeId, name: "value", value: "Bite me"});
+        }
+        */
+      }
+    });
+
     document.getElementById("passwordPresent").setAttribute("hidden", '');
     chrome.debugger.sendCommand({tabId:tabId}, "DOM.resolveNode", {"nodeId": nodeId}, function(object)
     {
@@ -788,36 +932,14 @@ function processInputSelector(nodeIdResults)
         return;
       }
 
-      chrome.debugger.sendCommand({tabId:tabId}, "DOM.describeNode", {"nodeId": nodeId}, function(object)
-      {
-        if (chrome.runtime.lastError)
-        {
-          console.log(chrome.runtime.lastError.message);
-          return;
-        }
-        let node = object.node;
-        console.dir(node.attributes);
-        if (node && node.attributes && node.attributes.length > 0)
-        {
-          // Stored as name1,value1,name2,value2, etc
-          for (let i = 0; i < node.attributes.length - 1; i +=2)
-          {
-            if (node.attributes[i] === "type" && node.attributes[i+1] === "password")
-            {
-              document.getElementById("passwordPresent").removeAttribute("hidden");
-            }
-          }
-        }
-      });
-
       let item = object.object;
-
       if (item.description.indexOf("pass") !== -1 || item.type === "password")
       {
         document.getElementById("passwordPresent").removeAttribute("hidden");
         //console.log("Password input detected");
       }
     });
+
   }
 }
 
@@ -888,6 +1010,7 @@ function processRequest(details)
   {
     return;
   }
+
   let container = getDomainReportContainer(url);
 
   if (urlReport.domain && urlReport.domain.length > 0)
@@ -910,6 +1033,7 @@ function processResponse(details)
   }
 
   let url = details.url;
+
   let container = getDomainReportContainer(url);
 
   // Status report will be per unique URL i.e. combination of domain and path
@@ -931,6 +1055,7 @@ function processResponseBody(params)
 
   let details = responses[params.requestId];
   let url = details.response.url;
+
   let container = getDomainReportContainer(url);
   let resourceType = details.type;
   /*
@@ -1067,7 +1192,7 @@ function createUrlReport(url)
 let containers = {};
 
 /*
-  Return the div which corresponds to the report for the given URL.
+  Return the element which corresponds to the report for the given URL.
   If one does not exist then it is created and returned, but NOT added
   to the document.
 */
@@ -1076,16 +1201,28 @@ function getDomainReportContainer(url)
   let parser = decomposeUrl(url);
   let domain = parser.hostname;
 
-  // If it already exists then return the existing one
-  let domainReportChildObj = containers[domain]; //document.getElementById(domain);
-  if (domainReportChildObj)
+  // Ignore things from ourself and things which aren't URLs
+  if (domain === document.location.hostname || parser.protocol === "data:")
   {
-    return domainReportChildObj;
+    return;
   }
 
-  // If it does not already exist then build a new one
-  domainReportChildObj = new DomainContainer();
-  domainReportChildObj.buildDomainContainer(domain);
+  // If it already exists then return the existing one
+  let domainReportChildObj = containers[domain];
 
+  if (!domainReportChildObj)
+  {
+    // If it does not already exist then build a new one
+    domainReportChildObj = new DomainContainer();
+    let elem = domainReportChildObj.buildDomainContainer(domain);
+    if (!elem)
+    {
+      console.log("failed to create domain report container for: " + url);
+      return;
+    }
+    //document.getElementById("urlReports").appendChild(elem);
+    containers[domain] = domainReportChildObj;
+  }
   return domainReportChildObj;
+
 }

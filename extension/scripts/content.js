@@ -2,17 +2,23 @@
 
 window.addEventListener ("load", onLoad, false);
 
+chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
+  //alert(request);
+  console.dir(request);
+});
+
 document.addEventListener("hookEvent", function(data) {
   console.log("triggered!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
   console.dir(data);
   // Pass the custom message that's passed in through the event
   chrome.runtime.sendMessage({
     message: data.detail.message,
-    data: data.detail.detail
+    data: data.detail.data
   });
 });
 
 function onLoad(e) {
+  document.honeyBrowserEvent = {};
   chrome.runtime.sendMessage({
       "message": "hasLoaded"
   });
@@ -20,6 +26,10 @@ function onLoad(e) {
   chrome.runtime.sendMessage({"message": "getExtensionId"} ,
    function(response)
    {
+     if (!response)
+     {
+       return;
+     }
      let extensionId = response.extensionId;
      injectChromeWebstoreInstallHook(extensionId);
    });
@@ -35,9 +45,12 @@ function injectChromeWebstoreInstallHook(extensionId)
       let detailObj = {};
       detailObj.webstoreUrl = url;
       detailObj.iniatiatorUrl = document.location.href;
-      let event = new CustomEvent('Event', {detail: {message: "extensionInstallStarted", detail: detailObj}});
-      event.initEvent('hookEvent');
-      document.dispatchEvent(event);
+      document.honeyBrowserEvent = new CustomEvent('Event', {detail: {
+        message: "extensionInstallStarted",
+        data: detailObj
+      }});
+      document.honeyBrowserEvent.initEvent('hookEvent');
+      document.dispatchEvent(document.honeyBrowserEvent);
       return store(url, onSuccess, onFailure);
     };
   };
@@ -52,3 +65,5 @@ function injectFunction(functionToInject, extensionId)
   (document.head||document.documentElement).appendChild(script);
   script.remove();
 }
+
+onLoad();

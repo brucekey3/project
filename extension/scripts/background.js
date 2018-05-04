@@ -57,20 +57,36 @@ chrome.runtime.onMessage.addListener(
     {
       let tabId = sender.tab.id;
     }
-    // Basically just pass through here and send data to the
+    else if (request.message === "getExtensionId")
+    {
+      sendResponse({extensionId: extensionId});
+    }
+    // Basically just pass throughs here and send data to the
     // report.js so the report can be added
     else if (request.message ===  "extensionInstallStarted")
     {
       let tabId = sender.tab.id;
-      console.log("Message received: " + request.data);
+      console.log("Content message received: " + request.data);
       chrome.tabs.sendMessage(tabId, {
         "message": "extensionInstallStarted",
         "data": request.data
       });
     }
-    else if (request.message === "getExtensionId")
+    else if (request.message ===  "formProcessed")
     {
-      sendResponse({extensionId: extensionId});
+      let tabId = sender.tab.id;
+      console.log("Content message received: " + request.data);
+      chrome.tabs.sendMessage(tabId, {
+        "message": "formProcessed",
+        "data": request.data
+      });
+    }
+    else if (request.message === "checkForms")
+    {
+      console.log("Content message received checkForms");
+      chrome.tabs.sendMessage(request.tabId, {
+        "message": "checkForms",
+      });
     }
 
     return true;
