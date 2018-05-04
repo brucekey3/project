@@ -4,7 +4,7 @@ let tabId = parseInt(window.location.search.substring(1));
 let report = {};
 let numRedirects = 0;
 let redirectThreshold = 1;
-
+let initialised = false;
 
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
@@ -66,7 +66,7 @@ function beginAnalysis()
 {
   chrome.debugger.sendCommand({tabId:tabId}, "Network.clearBrowserCache", {}, null);
 
-  chrome.tabs.reload(tabId, {bypassCache: true}, function() {
+  //chrome.tabs.reload(tabId, {bypassCache: true}, function() {
     chrome.debugger.onEvent.addListener(onEvent);
     chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
     chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
@@ -74,7 +74,7 @@ function beginAnalysis()
         chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
             window.setTimeout(stop, 10000);
         });
-    });
+    //});
 
     chrome.downloads.onCreated.addListener(downloadCreatedCallback);
 
@@ -94,10 +94,8 @@ function beginAnalysis()
 
 }
 
-window.addEventListener("load", function() {
-  document.getElementById("clearBtn").addEventListener("click", clear);
-  document.getElementById("reportsToggle").addEventListener("click", toggleHide)
-  //clear();
+function initialise()
+{
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
@@ -106,6 +104,17 @@ window.addEventListener("load", function() {
 
   // Give the debugger time to set up
   window.setTimeout(beginAnalysis, 100);
+  initialised = true;
+}
+
+window.addEventListener("load", function() {
+  document.getElementById("clearBtn").addEventListener("click", clear);
+  document.getElementById("reportsToggle").addEventListener("click", toggleHide)
+  //clear();
+  if (!initialised)
+  {
+    initialise();
+  }
 });
 
 window.addEventListener("unload", function() {
@@ -383,10 +392,12 @@ function onEvent(debuggeeId, message, params) {
 
     });
 
+
     chrome.tabs.executeScript(tabId, {
           file: 'scripts/analyseForms.js',
           allFrames: true,
     });
+
   }
   else if (message === "DOM.setChildNodes")
   {

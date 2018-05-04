@@ -12,26 +12,37 @@ chrome.webRequest.onHeadersReceived.addListener(function(details){
   });
 
 }, {urls: ["<all_urls>"]}, ["blocking", "responseHeaders"]);
+*/
 
+let shouldBeAttached = {};
 
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
-    console.log(details);
+    //console.dir(details);
+    let tabId = details.tabId;
+    if (shouldBeAttached[tabId])
+    {
+      chrome.debugger.attach({tabId: tabId},
+                              version,
+                              onAttachReport.bind(null, tabId));
+    }
     return {};
   },
   {urls: ["<all_urls>"]},
   ["blocking", "requestBody"]);
-*/
+
 var version = "1.0";
 let extensionId = undefined;
 
 function onAttachReport(tabId)
 {
   if (chrome.runtime.lastError) {
+    console.log(chrome.runtime.lastError.message);
     alert(chrome.runtime.lastError.message);
     return;
   }
-
+  
+  delete shouldBeAttached[tabId];
   chrome.windows.create(
      {url: "html/report.html?" + tabId,
       type: "popup",
@@ -45,13 +56,7 @@ chrome.runtime.onMessage.addListener(
       console.log("createReportWindow message received");
 
       let tabId = request.data;
-      let debuggeeId = {tabId: tabId};
-
-      chrome.debugger.attach(debuggeeId,
-                             version,
-                             onAttachReport.bind(null, tabId));
-
-
+      shouldBeAttached[tabId] = true;
     }
     else if (request.message === "hasLoaded")
     {
