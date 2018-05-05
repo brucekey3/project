@@ -3,6 +3,7 @@ let tabId = parseInt(window.location.search.substring(1));
 
 let report = {};
 let numRedirects = 0;
+let numFourHundredErrors = 0;
 let redirectThreshold = 1;
 let initialised = false;
 
@@ -15,7 +16,8 @@ chrome.runtime.onMessage.addListener(
         return;
       }
 
-      if (request.message === "extensionInstallStarted") {
+      if (request.message === "extensionInstallStarted")
+      {
         let extensionReport = [];
         let details = request.data;
         // If we have no details or no URL we cannot create a report
@@ -38,25 +40,32 @@ chrome.runtime.onMessage.addListener(
       else if (request.message === "formProcessed")
       {
         console.log("form processed");
-        console.dir(request);
         // note, work is now done in processRedirect
 
         let response = request.data.response;
         let analysis = static_analysis(response.body);
+        console.dir(response);
         console.dir(analysis);
-        let report = [];
+        let formReport = [];
 
         if (!response.redirected && analysis.possibleRedirects > 0)
         {
           let reportText = "Possible redirect found from non-redirect response"
                          + " from form submission with fake credentials"
                          + " - This may be phishing.";
-          report.push(reportText, SeverityEnum.MILD);
+          formReport.push(generateReport(reportText, SeverityEnum.MILD));
+
         }
 
         let container = getDomainReportContainer(response.url);
-        container.addDomainReport(report, "formResult");
+        container.addDomainReport(formReport, "formResult");
 
+      }
+      else if (request.message === "stopReport")
+      {
+        console.log("Stopping reporting");
+        deinitialise();
+        window.close();
       }
   }
 );
@@ -115,9 +124,13 @@ window.addEventListener("load", function() {
   {
     initialise();
   }
+
+  processDocument(undefined);
 });
 
-window.addEventListener("unload", function() {
+
+function deinitialise()
+{
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
@@ -126,7 +139,12 @@ window.addEventListener("unload", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
   chrome.debugger.detach({tabId:tabId});
 
-});
+  chrome.runtime.sendMessage({message: "updateStorage", data: {tabId: tabId}});
+
+}
+
+window.addEventListener("unload", deinitialise);
+window.addEventListener("beforeunload", deinitialise);
 
 
 let lastUserUsage = [];
@@ -362,7 +380,25 @@ function processRedirect(details) {
 
 }
 
+function processDocument(params)
+{
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
+    if (chrome.runtime.lastError)
+    {
+      console.log(chrome.runtime.lastError.message);
+      return;
+    }
+    //console.log(root.root);
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
+  });
+
+
+  chrome.tabs.executeScript(tabId, {
+        file: 'scripts/analyseForms.js',
+        allFrames: true,
+  });
+}
 
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
@@ -381,23 +417,7 @@ function onEvent(debuggeeId, message, params) {
   }
   else if (message === "DOM.documentUpdated")
   {
-    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
-      if (chrome.runtime.lastError)
-      {
-        console.log(chrome.runtime.lastError.message);
-        return;
-      }
-      //console.log(root.root);
-      chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
-
-    });
-
-
-    chrome.tabs.executeScript(tabId, {
-          file: 'scripts/analyseForms.js',
-          allFrames: true,
-    });
-
+    processDocument(params);
   }
   else if (message === "DOM.setChildNodes")
   {
@@ -1138,9 +1158,16 @@ function createStatusReport(details)
     report.push(generateReport("Status " + status + " redirect",
                                SeverityEnum.LOW));
   }
+  else if (status >= 400 && status < 500)
+  {
+    numFourHundredErrors += 1;
+    document.getElementById("numFourHundredErrors").textContent = "Number of 4XX errors is: " + numFourHundredErrors;
+    report.push(generateReport("Status " + status + " server error",
+                               SeverityEnum.MILD));
+  }
   else if (status >= 500)
   {
-    report.push(generateReport("Status " + status + " failed to load",
+    report.push(generateReport("Status " + status + " server error",
                                SeverityEnum.MILD));
   }
   return report;

@@ -41,7 +41,7 @@ function onAttachReport(tabId)
     alert(chrome.runtime.lastError.message);
     return;
   }
-  
+
   delete shouldBeAttached[tabId];
   chrome.windows.create(
      {url: "html/report.html?" + tabId,
@@ -55,8 +55,34 @@ chrome.runtime.onMessage.addListener(
     if (request.message === "createReportWindow") {
       console.log("createReportWindow message received");
 
-      let tabId = request.data;
-      shouldBeAttached[tabId] = true;
+      let tabId = request.data.tabId;
+      let url = request.data.url;
+      console.log(url);
+      if (url.startsWith("chrome://"))
+      {
+        shouldBeAttached[tabId] = true;
+      }
+      else
+      {
+        chrome.debugger.attach({tabId: tabId},
+                                version,
+                                onAttachReport.bind(null, tabId));
+      }
+    }
+    else if (request.message === "stopReport")
+    {
+      console.log("Stop report message received");
+      let tabId = request.data.tabId;
+      delete shouldBeAttached[tabId];
+      updateStorage(tabId);
+      chrome.tabs.sendMessage(tabId, {
+        "message": "stopReport",
+        "data": request.data
+      });
+    }
+    else if (request.message === "updateStorage")
+    {
+      updateStorage(request.data.tabId);
     }
     else if (request.message === "hasLoaded")
     {
@@ -96,6 +122,25 @@ chrome.runtime.onMessage.addListener(
 
     return true;
 });
+
+function updateStorage(tabId)
+{
+  // Update storage so the button will be correct
+  chrome.storage.local.get(function(items) {
+    for (obj of items.data)
+    {
+      items.data = items.data.filter(function(el) {
+          return el.tabId !== tabId;
+      });
+    }
+
+    // Now save the updated items using set
+    chrome.storage.local.set(items, function() {
+        console.log('Data successfully saved to the storage!');
+    });
+
+  });
+}
 
 console.log("background");
 chrome.management.getSelf(function(result) {

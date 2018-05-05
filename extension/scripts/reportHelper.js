@@ -77,9 +77,14 @@ function static_analysis(script)
   analysis.unescapeCount = (script.match(/unescape/gi) || []).length;
   analysis.functionCount = (script.match(/function/gi) || []).length;
   analysis.install = (script.match(/chrome\.webstore\.install/gi)|| []).length;
-  analysis.possibleRedirect = (script.match(/document\.location\.href[\s]*=/gi)|| []).length;
-  analysis.possibleRedirect += (script.match(/document\.location\.replace[\s]*=/gi)|| []).length;
-  analysis.possibleRedirect += (script.match(/document\.location\.assign[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects = (script.match(/document\.location\.href[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/document\.location\.replace[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/document\.location\.assign[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects = (script.match(/window\.location\.href[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/window\.location\.replace[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/window\.location\.assign[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/document\.location[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/window\.location[\s]*=/gi)|| []).length;
 
   return analysis;
 }
