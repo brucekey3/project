@@ -4,8 +4,56 @@ let tabId = parseInt(window.location.search.substring(1));
 let report = {};
 let numRedirects = 0;
 let numFourHundredErrors = 0;
+let numRequests = 0;
 let redirectThreshold = 1;
 let initialised = false;
+let responses = {};
+
+// Used for CPU usage monitoring
+let lastUserUsage = [];
+let lastKernelUsage = [];
+let lastIdleUsage = [];
+let lastTotalUsage = [];
+
+function clear(e)
+{
+  report = {};
+  numRedirects = 0;
+  numFourHundredErrors = 0;
+  numRequests = 0;
+  responses = {};
+  numRedirects = 0;
+  report = {};
+  containers = {};
+
+  updateNumFourHundredErrorText();
+  updateNumRedirectsText();
+  updateNumRequestsText();
+
+
+  document.getElementById("passwordPresent").textContent = "There is a password form present";
+  document.getElementById("passwordPresent").setAttribute("hidden", '');
+
+  let node = document.getElementById("urlReports");
+  while (node.hasChildNodes()) {
+    node.removeChild(node.lastChild);
+  }
+}
+
+function updateNumFourHundredErrorText()
+{
+  document.getElementById("numFourHundredErrors").textContent = "Number of 4XX errors is: " + numFourHundredErrors;
+}
+
+function updateNumRedirectsText()
+{
+  document.getElementById("numRedirects").textContent = "The number of redirects is: " + numRedirects;
+}
+
+function updateNumRequestsText()
+{
+  document.getElementById("numFourHundredErrors").textContent = "Number of requests is: " + numRequests;
+}
 
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
@@ -47,19 +95,21 @@ chrome.runtime.onMessage.addListener(
         console.dir(response);
         console.dir(analysis);
         let formReport = [];
+        let container = getDomainReportContainer(response.url);
 
         if (!response.redirected && analysis.possibleRedirects > 0)
         {
           let reportText = "Possible redirect found from non-redirect response"
-                         + " from form submission with fake credentials"
+                         + " from form submission with fake credentials. Body "
+                         + " contains location change"
                          + " - This may be phishing.";
-          formReport.push(generateReport(reportText, SeverityEnum.MILD));
-
+          formReport.push(generateReport(reportText, SeverityEnum.LOW));
         }
 
-        let container = getDomainReportContainer(response.url);
-        container.addDomainReport(formReport, "formResult");
-
+        if (formReport.length > 0)
+        {
+          container.addDomainReport(formReport, "formResult");
+        }
       }
       else if (request.message === "stopReport")
       {
@@ -124,7 +174,7 @@ window.addEventListener("load", function() {
   {
     initialise();
   }
-
+  console.log("Calling processDocument on load");
   processDocument(undefined);
 });
 
@@ -146,11 +196,6 @@ function deinitialise()
 window.addEventListener("unload", deinitialise);
 window.addEventListener("beforeunload", deinitialise);
 
-
-let lastUserUsage = [];
-let lastKernelUsage = [];
-let lastIdleUsage = [];
-let lastTotalUsage = [];
 
 function monitorCpuUsage(lastUsage)
 {
@@ -324,7 +369,7 @@ function processPerformanceMetrics(result)
   }
 }
 
-let responses = {};
+
 
 chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
@@ -339,9 +384,14 @@ function processRedirect(details) {
   let reportObj = getDomainReportContainer(urlBeforeRedirect);
   let severity = SeverityEnum.UNKNOWN;
   let report = [];
-  let beforeDomain = decomposeUrl(urlBeforeRedirect).hostname;
-  let afterDomain = decomposeUrl(urlAfterRedirect).hostname;
 
+  // Ensure there's no https:// or www. interfering
+  let beforeDomain = stripDomain(decomposeUrl(urlBeforeRedirect).hostname);
+  let afterDomain = stripDomain(decomposeUrl(urlAfterRedirect).hostname);
+
+
+  console.log(beforeDomain);
+  console.log(afterDomain);
 
   if (beforeDomain != afterDomain)
   {
@@ -356,9 +406,9 @@ function processRedirect(details) {
                  + urlAfterRedirect;
   // If the request was initated by the analyseForms script then handle this
   // separately
-  // This will, however, ignore redirects caused by other extensions until I
-  // have a fixed ID to locate
-  console.dir(details.responseHeaders);
+  //console.log(details.initiator);
+  //console.log(document.location.origin);
+
   if (details.initiator === document.location.origin)
   {
     let domainReport = [];
@@ -371,8 +421,7 @@ function processRedirect(details) {
   else
   {
     numRedirects += 1;
-    document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
-
+    updateNumRedirectsText();
     report.push(generateReport(reportText, severity));
     reportObj.addPathnameReport(urlBeforeRedirect, report);
   }
@@ -417,6 +466,7 @@ function onEvent(debuggeeId, message, params) {
   }
   else if (message === "DOM.documentUpdated")
   {
+    console.log("calling processDocument on document update");
     processDocument(params);
   }
   else if (message === "DOM.setChildNodes")
@@ -751,19 +801,6 @@ function toggleHide(id)
 
 }
 
-function clear(e)
-{
-  numRedirects = 0;
-  report = {};
-  containers = {};
-  document.getElementById("numRedirects").textContent = "The number of redirects is: 0";
-  document.getElementById("passwordPresent").textContent = "There is a password form present";
-  document.getElementById("passwordPresent").setAttribute("hidden", '');
-  let node = document.getElementById("urlReports");
-  while (node.hasChildNodes()) {
-    node.removeChild(node.lastChild);
-  }
-}
 
 /*
 {
@@ -856,7 +893,6 @@ function addSafeBrowsingReport(matches)
       console.log("SafeBrowsing couldn't add report - no container returned");
     }
 
-    report[url] = containerObject;
   }
 }
 
@@ -1024,6 +1060,9 @@ function sendSafeBrowsingCheck(url)
 
 function processRequest(details)
 {
+  numRequests += 1;
+  updateNumRequestsText();
+
   let url = details.url;
   let parser = decomposeUrl(url);
   // If it's a data: or chrome-extension: url then don't send safebrowsing check
@@ -1046,12 +1085,12 @@ function processRequest(details)
 
   if (urlReport.domain && urlReport.domain.length > 0)
   {
-    container.addDomainReport(urlReport.domain);
+    container.addDomainReport(urlReport.domain, "URL Report");
   }
 
   if (urlReport.pathname && urlReport.pathname.length > 0)
   {
-    container.addPathnameReport(url, urlReport.pathname);
+    container.addPathnameReport(url, urlReport.pathname, "URL Report");
   }
 }
 
@@ -1071,10 +1110,9 @@ function processResponse(details)
   let statusReport = createStatusReport(details);
   if (statusReport && statusReport.length > 0)
   {
-    container.addPathnameReport(url, statusReport);
+    container.addPathnameReport(url, statusReport, "Status Report");
   }
 
-  report[url] = container;
 }
 
 function processResponseBody(params)
@@ -1154,14 +1192,14 @@ function createStatusReport(details)
   {
     console.log("REDIRECT THO");
     numRedirects += 1;
-    document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+    updateNumRedirectsText();
     report.push(generateReport("Status " + status + " redirect",
                                SeverityEnum.LOW));
   }
   else if (status >= 400 && status < 500)
   {
     numFourHundredErrors += 1;
-    document.getElementById("numFourHundredErrors").textContent = "Number of 4XX errors is: " + numFourHundredErrors;
+    updateFourHundredErrorText();
     report.push(generateReport("Status " + status + " server error",
                                SeverityEnum.MILD));
   }
@@ -1186,7 +1224,7 @@ function createUrlReport(url)
   // Only do the same URL once
   if (report[url])
   {
-    return null;
+    return report[url];
   }
 
   let urlReport = {
@@ -1195,6 +1233,7 @@ function createUrlReport(url)
   };
   let parser = decomposeUrl(url);
   let domainReport = domainReports[parser.hostname];
+
   // If we haven't looked at this domain before then analyse it
   if (!domainReport)
   {

@@ -36,6 +36,29 @@ function decomposeUrl(href) {
   return parser;
 }
 
+// Ensure there's no https:// or www. interfering
+function stripDomain(domain)
+{
+  if (!domain)
+  {
+    return;
+  }
+  let stripped = domain;
+
+  let stripFields = ["https://", "http://", "www."];
+
+  for (field of stripFields)
+  {
+    let length = field.length;
+    if (stripped.substring(0, length) === field)
+    {
+      stripped = stripped.substring(length);
+    }
+  }
+
+  return stripped;
+}
+
 
 function analyse_domain(domain)
 {
