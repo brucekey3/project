@@ -412,17 +412,22 @@ function submitFormAndSendResults(form)
 
   var myHeaders = new Headers();
 
-  var myInit = {method: 'POST',
-               headers: myHeaders,
-               mode: 'cors',
-               cache: 'default',
-               body: formData};
+  var myInit = {
+    method: 'POST',
+    headers: myHeaders,
+    mode: 'cors',
+    cache: 'no-cache',
+    body: formData
+  };
 
   var myRequest = new Request(URL);
 
+  console.log("About to send fetch");
   fetch(myRequest, myInit).then(function (response) {
     // #ToDo: maybe analyse response for redirects
     analyseFormSubmissionResponse(response, URL);
+  }).catch(function(response) {
+    return Promise.reject('something went wrong in catch!');
   });
 
 }

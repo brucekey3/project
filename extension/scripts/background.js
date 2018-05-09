@@ -12,26 +12,37 @@ chrome.webRequest.onHeadersReceived.addListener(function(details){
   });
 
 }, {urls: ["<all_urls>"]}, ["blocking", "responseHeaders"]);
+*/
 
+let shouldBeAttached = {};
 
 chrome.webRequest.onBeforeRequest.addListener(
   function(details) {
-    console.log(details);
+    //console.dir(details);
+    let tabId = details.tabId;
+    if (shouldBeAttached[tabId])
+    {
+      chrome.debugger.attach({tabId: tabId},
+                              version,
+                              onAttachReport.bind(null, tabId));
+    }
     return {};
   },
   {urls: ["<all_urls>"]},
   ["blocking", "requestBody"]);
-*/
+
 var version = "1.0";
 let extensionId = undefined;
 
 function onAttachReport(tabId)
 {
   if (chrome.runtime.lastError) {
+    console.log(chrome.runtime.lastError.message);
     alert(chrome.runtime.lastError.message);
     return;
   }
 
+  delete shouldBeAttached[tabId];
   chrome.windows.create(
      {url: "html/report.html?" + tabId,
       type: "popup",
@@ -44,14 +55,34 @@ chrome.runtime.onMessage.addListener(
     if (request.message === "createReportWindow") {
       console.log("createReportWindow message received");
 
-      let tabId = request.data;
-      let debuggeeId = {tabId: tabId};
-
-      chrome.debugger.attach(debuggeeId,
-                             version,
-                             onAttachReport.bind(null, tabId));
-
-
+      let tabId = request.data.tabId;
+      let url = request.data.url;
+      console.log(url);
+      if (url.startsWith("chrome://"))
+      {
+        shouldBeAttached[tabId] = true;
+      }
+      else
+      {
+        chrome.debugger.attach({tabId: tabId},
+                                version,
+                                onAttachReport.bind(null, tabId));
+      }
+    }
+    else if (request.message === "stopReport")
+    {
+      console.log("Stop report message received");
+      let tabId = request.data.tabId;
+      delete shouldBeAttached[tabId];
+      updateStorage(tabId);
+      chrome.tabs.sendMessage(tabId, {
+        "message": "stopReport",
+        "data": request.data
+      });
+    }
+    else if (request.message === "updateStorage")
+    {
+      updateStorage(request.data.tabId);
     }
     else if (request.message === "hasLoaded")
     {
@@ -91,6 +122,25 @@ chrome.runtime.onMessage.addListener(
 
     return true;
 });
+
+function updateStorage(tabId)
+{
+  // Update storage so the button will be correct
+  chrome.storage.local.get(function(items) {
+    for (obj of items.data)
+    {
+      items.data = items.data.filter(function(el) {
+          return el.tabId !== tabId;
+      });
+    }
+
+    // Now save the updated items using set
+    chrome.storage.local.set(items, function() {
+        console.log('Data successfully saved to the storage!');
+    });
+
+  });
+}
 
 console.log("background");
 chrome.management.getSelf(function(result) {

@@ -77,9 +77,11 @@ function static_analysis(script)
   analysis.unescapeCount = (script.match(/unescape/gi) || []).length;
   analysis.functionCount = (script.match(/function/gi) || []).length;
   analysis.install = (script.match(/chrome\.webstore\.install/gi)|| []).length;
-  analysis.possibleRedirect = (script.match(/document\.location\.href[\s]*=/gi)|| []).length;
-  analysis.possibleRedirect += (script.match(/document\.location\.replace[\s]*=/gi)|| []).length;
-  analysis.possibleRedirect += (script.match(/document\.location\.assign[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects = (script.match(/location\.href[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/location\.replace[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/location\.assign[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/location[\s]*=/gi)|| []).length;
+  analysis.possibleRedirects += (script.match(/location[\s]*=/gi)|| []).length;
 
   return analysis;
 }
@@ -110,12 +112,12 @@ class PathnameContainer
     this.pathname = undefined;
   }
 
-  buildPathnameContainer(pathname)
+  buildPathnameContainer(domain, pathname)
   {
     this.pathname = pathname;
     this.pathnameContainer = document.createElement("div");
     this.pathnameContainer.setAttribute("class", "pathnameContainer");
-    this.pathnameContainer.setAttribute("id", pathname);
+    this.pathnameContainer.setAttribute("id", domain + pathname);
 
     let descriptionWrapper = document.createElement("h3");
     descriptionWrapper.setAttribute("id", pathname + "description")
@@ -138,11 +140,13 @@ class PathnameContainer
 class DomainContainer
 {
 
+
   DomainContainer()
   {
     // Defaults
     this.domain = undefined;
     this.domainContainer = undefined;
+    this.pathnameContainers = undefined;
   }
 
   buildDomainContainer(domain)
@@ -177,6 +181,8 @@ class DomainContainer
     let pathnameChild = document.createElement("span");
     pathnameChild.setAttribute("id", "pathnames" + this.domain);
     this.domainContainer.appendChild(pathnameChild)
+
+    this.pathnameContainers = {};
 
     return this.domainContainer;
   }
@@ -251,8 +257,13 @@ class DomainContainer
       urlReports.appendChild(this.domainContainer);
     }
 
-    let pathnameContainerObj = new PathnameContainer();
-    pathnameContainerObj.buildPathnameContainer(pathname);
+    let pathnameContainerObj = this.pathnameContainers[pathname];
+    if (!pathnameContainerObj)
+    {
+      pathnameContainerObj = new PathnameContainer();
+      pathnameContainerObj.buildPathnameContainer(this.domain, pathname);
+      this.pathnameContainers[pathname] = pathnameContainerObj;
+    }
 
     pathnameContainerObj.addPathnameReport(pathnameReport, label);
     let pathnamesContainer = document.getElementById("pathnames" + this.domain);

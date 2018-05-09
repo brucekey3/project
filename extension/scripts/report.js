@@ -1,10 +1,66 @@
+// Used when parsing certificate dates
+const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+// Used for safeBrowsing
+const API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
 let tabId = parseInt(window.location.search.substring(1));
 // let extensionId = window.location.host;
 
 let report = {};
 let numRedirects = 0;
+let numFourHundredErrors = 0;
+let numRequests = 0;
 let redirectThreshold = 1;
+let initialised = false;
+let responses = {};
 
+// Used for CPU usage monitoring
+let lastUserUsage = [];
+let lastKernelUsage = [];
+let lastIdleUsage = [];
+let lastTotalUsage = [];
+let domainReports = {};
+let containers = {};
+
+function clear(e)
+{
+  report = {};
+  numRedirects = 0;
+  numFourHundredErrors = 0;
+  numRequests = 0;
+  responses = {};
+  numRedirects = 0;
+  report = {};
+  containers = {};
+  domainReports = {};
+
+  updateNumFourHundredErrorText();
+  updateNumRedirectsText();
+  updateNumRequestsText();
+
+
+  document.getElementById("passwordPresent").textContent = "There is a password form present";
+  document.getElementById("passwordPresent").setAttribute("hidden", '');
+
+  let node = document.getElementById("urlReports");
+  while (node.hasChildNodes()) {
+    node.removeChild(node.lastChild);
+  }
+}
+
+function updateNumFourHundredErrorText()
+{
+  document.getElementById("numFourHundredErrors").textContent = "Number of 4XX errors is: " + numFourHundredErrors;
+}
+
+function updateNumRedirectsText()
+{
+  document.getElementById("numRedirects").textContent = "The number of redirects is: " + numRedirects;
+}
+
+function updateNumRequestsText()
+{
+  document.getElementById("numRequests").textContent = "Number of requests is: " + numRequests;
+}
 
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
@@ -15,7 +71,8 @@ chrome.runtime.onMessage.addListener(
         return;
       }
 
-      if (request.message === "extensionInstallStarted") {
+      if (request.message === "extensionInstallStarted")
+      {
         let extensionReport = [];
         let details = request.data;
         // If we have no details or no URL we cannot create a report
@@ -38,25 +95,34 @@ chrome.runtime.onMessage.addListener(
       else if (request.message === "formProcessed")
       {
         console.log("form processed");
-        console.dir(request);
         // note, work is now done in processRedirect
 
         let response = request.data.response;
         let analysis = static_analysis(response.body);
+        console.dir(response);
         console.dir(analysis);
-        let report = [];
+        let formReport = [];
+        let container = getDomainReportContainer(response.url);
 
         if (!response.redirected && analysis.possibleRedirects > 0)
         {
           let reportText = "Possible redirect found from non-redirect response"
-                         + " from form submission with fake credentials"
+                         + " from form submission with fake credentials. Body "
+                         + " contains location change"
                          + " - This may be phishing.";
-          report.push(reportText, SeverityEnum.MILD);
+          formReport.push(generateReport(reportText, SeverityEnum.LOW));
         }
 
-        let container = getDomainReportContainer(response.url);
-        container.addDomainReport(report, "formResult");
-
+        if (formReport.length > 0)
+        {
+          container.addDomainReport(formReport, "formResult");
+        }
+      }
+      else if (request.message === "stopReport")
+      {
+        console.log("Stopping reporting");
+        deinitialise();
+        window.close();
       }
   }
 );
@@ -66,7 +132,7 @@ function beginAnalysis()
 {
   chrome.debugger.sendCommand({tabId:tabId}, "Network.clearBrowserCache", {}, null);
 
-  chrome.tabs.reload(tabId, {bypassCache: true}, function() {
+  //chrome.tabs.reload(tabId, {bypassCache: true}, function() {
     chrome.debugger.onEvent.addListener(onEvent);
     chrome.debugger.sendCommand({tabId:tabId}, "Performance.getMetrics", {}, processPerformanceMetrics);
     chrome.debugger.sendCommand({tabId:tabId}, "Profiler.setSamplingInterval", {interval: 100}, null);
@@ -74,7 +140,7 @@ function beginAnalysis()
         chrome.debugger.sendCommand({tabId:tabId}, "Profiler.start", {}, function() {
             window.setTimeout(stop, 10000);
         });
-    });
+    //});
 
     chrome.downloads.onCreated.addListener(downloadCreatedCallback);
 
@@ -94,10 +160,8 @@ function beginAnalysis()
 
 }
 
-window.addEventListener("load", function() {
-  document.getElementById("clearBtn").addEventListener("click", clear);
-  document.getElementById("reportsToggle").addEventListener("click", toggleHide)
-  //clear();
+function initialise()
+{
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
@@ -106,9 +170,11 @@ window.addEventListener("load", function() {
 
   // Give the debugger time to set up
   window.setTimeout(beginAnalysis, 100);
-});
+  initialised = true;
+}
 
-window.addEventListener("unload", function() {
+function deinitialise()
+{
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
@@ -117,13 +183,25 @@ window.addEventListener("unload", function() {
   chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
   chrome.debugger.detach({tabId:tabId});
 
+  chrome.runtime.sendMessage({message: "updateStorage", data: {tabId: tabId}});
+
+}
+
+window.addEventListener("load", function() {
+  document.getElementById("clearBtn").addEventListener("click", clear);
+  document.getElementById("reportsToggle").addEventListener("click", toggleHideEvent);
+  //clear();
+  if (!initialised)
+  {
+    initialise();
+  }
+  console.log("Calling processDocument on load");
+  processDocument(undefined);
 });
 
+window.addEventListener("unload", deinitialise);
+window.addEventListener("beforeunload", deinitialise);
 
-let lastUserUsage = [];
-let lastKernelUsage = [];
-let lastIdleUsage = [];
-let lastTotalUsage = [];
 
 function monitorCpuUsage(lastUsage)
 {
@@ -297,7 +375,7 @@ function processPerformanceMetrics(result)
   }
 }
 
-let responses = {};
+
 
 chrome.webRequest.onBeforeRedirect.addListener(processRedirect, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls>"]}, ["requestBody"]);
@@ -312,9 +390,14 @@ function processRedirect(details) {
   let reportObj = getDomainReportContainer(urlBeforeRedirect);
   let severity = SeverityEnum.UNKNOWN;
   let report = [];
-  let beforeDomain = decomposeUrl(urlBeforeRedirect).hostname;
-  let afterDomain = decomposeUrl(urlAfterRedirect).hostname;
 
+  // Ensure there's no https:// or www. interfering
+  let beforeDomain = stripDomain(decomposeUrl(urlBeforeRedirect).hostname);
+  let afterDomain = stripDomain(decomposeUrl(urlAfterRedirect).hostname);
+
+
+  //console.log(beforeDomain);
+  //console.log(afterDomain);
 
   if (beforeDomain != afterDomain)
   {
@@ -329,9 +412,9 @@ function processRedirect(details) {
                  + urlAfterRedirect;
   // If the request was initated by the analyseForms script then handle this
   // separately
-  // This will, however, ignore redirects caused by other extensions until I
-  // have a fixed ID to locate
-  console.dir(details.responseHeaders);
+  //console.log(details.initiator);
+  //console.log(document.location.origin);
+
   if (details.initiator === document.location.origin)
   {
     let domainReport = [];
@@ -344,8 +427,7 @@ function processRedirect(details) {
   else
   {
     numRedirects += 1;
-    document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
-
+    updateNumRedirectsText();
     report.push(generateReport(reportText, severity));
     reportObj.addPathnameReport(urlBeforeRedirect, report);
   }
@@ -353,7 +435,25 @@ function processRedirect(details) {
 
 }
 
+function processDocument(params)
+{
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
+    if (chrome.runtime.lastError)
+    {
+      console.log(chrome.runtime.lastError.message);
+      return;
+    }
+    //console.log(root.root);
+    chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
 
+  });
+
+
+  chrome.tabs.executeScript(tabId, {
+        file: 'scripts/analyseForms.js',
+        allFrames: true,
+  });
+}
 
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
@@ -372,29 +472,8 @@ function onEvent(debuggeeId, message, params) {
   }
   else if (message === "DOM.documentUpdated")
   {
-    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
-      if (chrome.runtime.lastError)
-      {
-        console.log(chrome.runtime.lastError.message);
-        return;
-      }
-      //console.log(root.root);
-      chrome.debugger.sendCommand({tabId:tabId}, "DOM.querySelectorAll", {nodeId: root.root.nodeId, selector: "input"}, processInputSelector);
-
-    });
-
-    chrome.tabs.executeScript(tabId, {
-          file: 'scripts/analyseForms.js',
-          allFrames: true,
-    });
-  }
-  else if (message === "DOM.setChildNodes")
-  {
-    if (formIds[params.parentId] )
-    {
-      console.log("setChildNodes");
-      console.dir(params);
-    }
+    console.log("calling processDocument on document update");
+    processDocument(params);
   }
   else if (message == "Security.securityStateChanged")
   {
@@ -417,7 +496,7 @@ function onEvent(debuggeeId, message, params) {
 }
 
 
-const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+
 function processInitialResponse(params)
 {
   //console.log("For " + params.response.url);
@@ -695,44 +774,34 @@ function processSecurityStateChanged(params)
 function toggleHideEvent(e)
 {
   toggleHide("urlReports");
-  if (document.getElementById("urlReports").hasAttribute("hidden"))
+  let btn = document.getElementById("reportsToggle");
+  if (btn.textContent === "Hide Reports")
   {
-    document.getElementById("urlReports").removeAttribute("hidden");
+    btn.textContent = "Unhide Reports";
   }
-  else {
-    document.getElementById("urlReports").setAttribute("hidden", '');
+  else
+  {
+    btn.textContent = "Hide Reports";
   }
 }
 
 function toggleHide(id)
 {
-  $(document.getElementById(id)).toggleClass("down");
-  let element = document.getElementById(id).childNodes[1];
+  console.log("Hiding " + id);
+  let elem = document.getElementById(id);
+  $(elem).toggleClass("down");
 
-  if (element.hasAttribute("hidden"))
+  if (elem.hasAttribute("hidden"))
   {
-    element.removeAttribute("hidden");
+    elem.removeAttribute("hidden");
   }
   else {
-    element.setAttribute("hidden", '');
+    elem.setAttribute("hidden", '');
   }
 
 
 }
 
-function clear(e)
-{
-  numRedirects = 0;
-  report = {};
-  containers = {};
-  document.getElementById("numRedirects").textContent = "The number of redirects is: 0";
-  document.getElementById("passwordPresent").textContent = "There is a password form present";
-  document.getElementById("passwordPresent").setAttribute("hidden", '');
-  let node = document.getElementById("urlReports");
-  while (node.hasChildNodes()) {
-    node.removeChild(node.lastChild);
-  }
-}
 
 /*
 {
@@ -782,6 +851,7 @@ ex 2
 */
 function addSafeBrowsingReport(matches)
 {
+  console.dir(matches)
   for (match of matches)
   {
     let safeReport = [];
@@ -825,7 +895,6 @@ function addSafeBrowsingReport(matches)
       console.log("SafeBrowsing couldn't add report - no container returned");
     }
 
-    report[url] = containerObject;
   }
 }
 
@@ -840,30 +909,7 @@ function safeCheckCallback(url, matches)
   }
 }
 
-let formIds = {};
-function processFormSelector(nodeIdResults)
-{
-  if (chrome.runtime.lastError)
-  {
-    console.log(chrome.runtime.lastError.message);
-    return;
-  }
-  else if (!nodeIdResults)
-  {
-    console.log("processFormSelector called with undefined object");
-    return;
-  }
-  let nodeIds = nodeIdResults.nodeIds;
-  console.log("ids");
-  console.dir(nodeIds);
-  for (nodeId of nodeIds)
-  {
-    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getOuterHTML", {nodeId: nodeId}, function (outerHTML) {
-      console.log(outerHTML);
-    });
-    formIds[nodeId] = true;
-  }
-}
+
 
 function processInputSelector(nodeIdResults)
 {
@@ -947,7 +993,7 @@ function processInputSelector(nodeIdResults)
 *     END OF CALLBACKS
 */
 
-let API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
+
 
 function sendSafeBrowsingCheck(url)
 {
@@ -993,6 +1039,9 @@ function sendSafeBrowsingCheck(url)
 
 function processRequest(details)
 {
+  numRequests += 1;
+  updateNumRequestsText();
+
   let url = details.url;
   let parser = decomposeUrl(url);
   // If it's a data: or chrome-extension: url then don't send safebrowsing check
@@ -1015,12 +1064,12 @@ function processRequest(details)
 
   if (urlReport.domain && urlReport.domain.length > 0)
   {
-    container.addDomainReport(urlReport.domain);
+    container.addDomainReport(urlReport.domain, "URL Report");
   }
 
   if (urlReport.pathname && urlReport.pathname.length > 0)
   {
-    container.addPathnameReport(url, urlReport.pathname);
+    container.addPathnameReport(url, urlReport.pathname, "URL Report");
   }
 }
 
@@ -1040,10 +1089,9 @@ function processResponse(details)
   let statusReport = createStatusReport(details);
   if (statusReport && statusReport.length > 0)
   {
-    container.addPathnameReport(url, statusReport);
+    container.addPathnameReport(url, statusReport, "Status Report");
   }
 
-  report[url] = container;
 }
 
 function processResponseBody(params)
@@ -1123,19 +1171,26 @@ function createStatusReport(details)
   {
     console.log("REDIRECT THO");
     numRedirects += 1;
-    document.getElementById("numRedirects").textContent = "Number of redirects is: " + numRedirects;
+    updateNumRedirectsText();
     report.push(generateReport("Status " + status + " redirect",
                                SeverityEnum.LOW));
   }
+  else if (status >= 400 && status < 500)
+  {
+    numFourHundredErrors += 1;
+    updateNumFourHundredErrorText();
+    report.push(generateReport("Status " + status + " server error",
+                               SeverityEnum.MILD));
+  }
   else if (status >= 500)
   {
-    report.push(generateReport("Status " + status + " failed to load",
+    report.push(generateReport("Status " + status + " server error",
                                SeverityEnum.MILD));
   }
   return report;
 }
 
-domainReports = {};
+
 
 /*
   Create a report for the given URL and return it as a HTML element such as
@@ -1148,7 +1203,7 @@ function createUrlReport(url)
   // Only do the same URL once
   if (report[url])
   {
-    return null;
+    return report[url];
   }
 
   let urlReport = {
@@ -1157,6 +1212,7 @@ function createUrlReport(url)
   };
   let parser = decomposeUrl(url);
   let domainReport = domainReports[parser.hostname];
+
   // If we haven't looked at this domain before then analyse it
   if (!domainReport)
   {
@@ -1189,7 +1245,7 @@ function createUrlReport(url)
   return urlReport;
 }
 
-let containers = {};
+
 
 /*
   Return the element which corresponds to the report for the given URL.
