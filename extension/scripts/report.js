@@ -1,3 +1,7 @@
+// Used when parsing certificate dates
+const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+// Used for safeBrowsing
+const API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
 let tabId = parseInt(window.location.search.substring(1));
 // let extensionId = window.location.host;
 
@@ -14,6 +18,8 @@ let lastUserUsage = [];
 let lastKernelUsage = [];
 let lastIdleUsage = [];
 let lastTotalUsage = [];
+let domainReports = {};
+let containers = {};
 
 function clear(e)
 {
@@ -25,6 +31,7 @@ function clear(e)
   numRedirects = 0;
   report = {};
   containers = {};
+  domainReports = {};
 
   updateNumFourHundredErrorText();
   updateNumRedirectsText();
@@ -52,7 +59,7 @@ function updateNumRedirectsText()
 
 function updateNumRequestsText()
 {
-  document.getElementById("numFourHundredErrors").textContent = "Number of requests is: " + numRequests;
+  document.getElementById("numRequests").textContent = "Number of requests is: " + numRequests;
 }
 
 chrome.runtime.onMessage.addListener(
@@ -166,19 +173,6 @@ function initialise()
   initialised = true;
 }
 
-window.addEventListener("load", function() {
-  document.getElementById("clearBtn").addEventListener("click", clear);
-  document.getElementById("reportsToggle").addEventListener("click", toggleHide)
-  //clear();
-  if (!initialised)
-  {
-    initialise();
-  }
-  console.log("Calling processDocument on load");
-  processDocument(undefined);
-});
-
-
 function deinitialise()
 {
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
@@ -192,6 +186,18 @@ function deinitialise()
   chrome.runtime.sendMessage({message: "updateStorage", data: {tabId: tabId}});
 
 }
+
+window.addEventListener("load", function() {
+  document.getElementById("clearBtn").addEventListener("click", clear);
+  document.getElementById("reportsToggle").addEventListener("click", toggleHideEvent);
+  //clear();
+  if (!initialised)
+  {
+    initialise();
+  }
+  console.log("Calling processDocument on load");
+  processDocument(undefined);
+});
 
 window.addEventListener("unload", deinitialise);
 window.addEventListener("beforeunload", deinitialise);
@@ -390,8 +396,8 @@ function processRedirect(details) {
   let afterDomain = stripDomain(decomposeUrl(urlAfterRedirect).hostname);
 
 
-  console.log(beforeDomain);
-  console.log(afterDomain);
+  //console.log(beforeDomain);
+  //console.log(afterDomain);
 
   if (beforeDomain != afterDomain)
   {
@@ -469,14 +475,6 @@ function onEvent(debuggeeId, message, params) {
     console.log("calling processDocument on document update");
     processDocument(params);
   }
-  else if (message === "DOM.setChildNodes")
-  {
-    if (formIds[params.parentId] )
-    {
-      console.log("setChildNodes");
-      console.dir(params);
-    }
-  }
   else if (message == "Security.securityStateChanged")
   {
     processSecurityStateChanged(params);
@@ -498,7 +496,7 @@ function onEvent(debuggeeId, message, params) {
 }
 
 
-const _MS_PER_DAY = 1000 * 60 * 60 * 24;
+
 function processInitialResponse(params)
 {
   //console.log("For " + params.response.url);
@@ -776,26 +774,29 @@ function processSecurityStateChanged(params)
 function toggleHideEvent(e)
 {
   toggleHide("urlReports");
-  if (document.getElementById("urlReports").hasAttribute("hidden"))
+  let btn = document.getElementById("reportsToggle");
+  if (btn.textContent === "Hide Reports")
   {
-    document.getElementById("urlReports").removeAttribute("hidden");
+    btn.textContent = "Unhide Reports";
   }
-  else {
-    document.getElementById("urlReports").setAttribute("hidden", '');
+  else
+  {
+    btn.textContent = "Hide Reports";
   }
 }
 
 function toggleHide(id)
 {
-  $(document.getElementById(id)).toggleClass("down");
-  let element = document.getElementById(id).childNodes[1];
+  console.log("Hiding " + id);
+  let elem = document.getElementById(id);
+  $(elem).toggleClass("down");
 
-  if (element.hasAttribute("hidden"))
+  if (elem.hasAttribute("hidden"))
   {
-    element.removeAttribute("hidden");
+    elem.removeAttribute("hidden");
   }
   else {
-    element.setAttribute("hidden", '');
+    elem.setAttribute("hidden", '');
   }
 
 
@@ -850,6 +851,7 @@ ex 2
 */
 function addSafeBrowsingReport(matches)
 {
+  console.dir(matches)
   for (match of matches)
   {
     let safeReport = [];
@@ -907,30 +909,7 @@ function safeCheckCallback(url, matches)
   }
 }
 
-let formIds = {};
-function processFormSelector(nodeIdResults)
-{
-  if (chrome.runtime.lastError)
-  {
-    console.log(chrome.runtime.lastError.message);
-    return;
-  }
-  else if (!nodeIdResults)
-  {
-    console.log("processFormSelector called with undefined object");
-    return;
-  }
-  let nodeIds = nodeIdResults.nodeIds;
-  console.log("ids");
-  console.dir(nodeIds);
-  for (nodeId of nodeIds)
-  {
-    chrome.debugger.sendCommand({tabId:tabId}, "DOM.getOuterHTML", {nodeId: nodeId}, function (outerHTML) {
-      console.log(outerHTML);
-    });
-    formIds[nodeId] = true;
-  }
-}
+
 
 function processInputSelector(nodeIdResults)
 {
@@ -1014,7 +993,7 @@ function processInputSelector(nodeIdResults)
 *     END OF CALLBACKS
 */
 
-let API_KEY = 'AIzaSyBkdzT2k1HcVtyqMUr3v4Lkpswv8WfvyeQ';
+
 
 function sendSafeBrowsingCheck(url)
 {
@@ -1199,7 +1178,7 @@ function createStatusReport(details)
   else if (status >= 400 && status < 500)
   {
     numFourHundredErrors += 1;
-    updateFourHundredErrorText();
+    updateNumFourHundredErrorText();
     report.push(generateReport("Status " + status + " server error",
                                SeverityEnum.MILD));
   }
@@ -1211,7 +1190,7 @@ function createStatusReport(details)
   return report;
 }
 
-domainReports = {};
+
 
 /*
   Create a report for the given URL and return it as a HTML element such as
@@ -1266,7 +1245,7 @@ function createUrlReport(url)
   return urlReport;
 }
 
-let containers = {};
+
 
 /*
   Return the element which corresponds to the report for the given URL.
