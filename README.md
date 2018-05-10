@@ -22,12 +22,16 @@ mining cryptocurrency on the user's computer.
 
 * The URL is checked for any special characters (such as '<', '>', '@' for example) and if any are found then it is deemed suspicious.
 
+* The number of requests is kept track of and displayed
+
 ### Response Processing
 * If the connection is secured over HTTPS then the certificate is examined and displayed to the user. The date that the certificate was issued and the date that it expires are examined in order to determine whether it is still valid and novel results are used to do a preliminary check whether or not the site is likely suspicious. This is not to be trusted too much, however, since many certificates from legitimate sites and malicious sites can seem similar.
 
 * The response body is checked to see whether or not it contains a script, if it does, the script is statically analysed for anything suspicious. This is covered in the "Static Analysis" section
 
 * The status of the response is examined. If the status is a 3XX code then it is flagged as a redirect. If it is a 500 code then this is also flagged.
+
+* The number of 4XX codes and redirects is kept track of and displayed
 
 * When a redirect is received, this is flagged to the user with the status code and the URLs that are being directed from and to. Severity is increased if the redirect changes domain. The number of redirects is also kept track of since a high number can be suspicious.
 
@@ -47,6 +51,8 @@ In the document (on every time it is refreshed):
 * When a download starts a warning is displayed and and known details are displayed with it. The URL which initiated the download is displayed and any suspicious details are shown (which are automatically detected by the Chrome browser).
 
 * The "security state" of the page is monitored and displayed to the user and is updated on any change. This includes information on whether the page is loaded over a secure conenction, whether there is mixed content and any explanations about why the site may not be secure.
+
+* Keeps track of and displays the number of console messaged flagged as warnings or errors of the page.
 
 ### Anti-Phishing
 * Any forms on the page which are not search forms are filled in with dummy values and submitted. If there is a resulting redirect then a warning is displayed in the report window since this is a sign that the page has perceived the action as successful when it should not have been. Benign pages normally respond with 200 OK and display errors on the page but will sometimes redirect to another page with a captcha, for example, so this method is not foolproof. At the moment the form filling is limited to 'select' tags and inputs labelled as email and password. Any unknown inputs are labelled with simpler non-specific text.

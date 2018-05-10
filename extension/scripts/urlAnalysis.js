@@ -3,6 +3,7 @@ let suspiciousSeparators = ['-', '.']
 // Match anything which contains a possible IP address
 let ipRegex = /^(.*[^0-9]|)(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)([^0-9].*|$)/;
 let suspiciousSeparatorsThreshold = 5;
+let suspiciousSlashesThreshold = 5;
 
 // Uses the regex to test whether or not the string is an IP address
 function isPureIPAddress(testString)
@@ -127,9 +128,16 @@ function analyse_pathname(pathname)
       found.push(specialCharacters[i]);
     }
   }
+
   if (found.length > 0)
   {
     report.push(generateReport("Special characters: " + found.toString(), SeverityEnum.LOW));
+  }
+
+  let numSlashes = (pathname.match(/\//g)||[]).length
+  if (numSlashes > suspiciousSlashesThreshold)
+  {
+    report.push(generateReport("" + numSlashes + " /'s found, this could be malicious", SeverityEnum.LOW));
   }
 
   return report;

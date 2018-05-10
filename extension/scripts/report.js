@@ -9,6 +9,10 @@ let report = {};
 let numRedirects = 0;
 let numFourHundredErrors = 0;
 let numRequests = 0;
+
+let numConsoleErrors = 0;
+let numConsoleWarnings = 0;
+
 let redirectThreshold = 1;
 let initialised = false;
 let responses = {};
@@ -27,6 +31,8 @@ function clear(e)
   numRedirects = 0;
   numFourHundredErrors = 0;
   numRequests = 0;
+  numConsoleWarnings = 0;
+  numConsoleErrors = 0;
   responses = {};
   numRedirects = 0;
   report = {};
@@ -36,7 +42,8 @@ function clear(e)
   updateNumFourHundredErrorText();
   updateNumRedirectsText();
   updateNumRequestsText();
-
+  updateNumConsoleErrors();
+  updateNumConsoleWarnings();
 
   document.getElementById("passwordPresent").textContent = "There is a password form present";
   document.getElementById("passwordPresent").setAttribute("hidden", '');
@@ -45,6 +52,16 @@ function clear(e)
   while (node.hasChildNodes()) {
     node.removeChild(node.lastChild);
   }
+}
+
+function updateNumConsoleErrors()
+{
+  document.getElementById("numConsoleErrors").textContent = "Number of console errors is: " + numConsoleErrors;
+}
+
+function updateNumConsoleWarnings()
+{
+  document.getElementById("numConsoleWarnings").textContent = "Number of console warnings is: " + numConsoleWarnings;
 }
 
 function updateNumFourHundredErrorText()
@@ -164,9 +181,11 @@ function initialise()
 {
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
+
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Log.enable");
 
   // Give the debugger time to set up
   window.setTimeout(beginAnalysis, 100);
@@ -181,6 +200,7 @@ function deinitialise()
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Security.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Log.disable");
   chrome.debugger.detach({tabId:tabId});
 
   chrome.runtime.sendMessage({message: "updateStorage", data: {tabId: tabId}});
@@ -455,6 +475,29 @@ function processDocument(params)
   });
 }
 
+function processLogEntryAdded(params)
+{
+  if (!params)
+  {
+    return;
+  }
+
+  let entry = params.entry;
+
+  console.dir(entry);
+  if (entry.level === "error")
+  {
+    console.log("Updating error count:" + numConsoleErrors);
+    numConsoleErrors += 1;
+    updateNumConsoleErrors();
+  }
+  else if (entry.level === "warning");
+  {
+    numConsoleWarnings += 1;
+    updateNumConsoleWarnings();
+  }
+}
+
 function onEvent(debuggeeId, message, params) {
   if (tabId != debuggeeId.tabId)
   {
@@ -475,22 +518,26 @@ function onEvent(debuggeeId, message, params) {
     console.log("calling processDocument on document update");
     processDocument(params);
   }
-  else if (message == "Security.securityStateChanged")
+  else if (message === "Security.securityStateChanged")
   {
     processSecurityStateChanged(params);
   }
   // Note: this may be deprecated
-  else if (message == "Security.certificateError")
+  else if (message === "Security.certificateError")
   {
     processCertificateError(params);
   }
-  else if (message == "Performance.metrics")
+  else if (message === "Performance.metrics")
   {
     processPerformanceMetrics(params);
   }
-  else if (message == "Profiler.consoleProfileFinished")
+  else if (message === "Profiler.consoleProfileFinished")
   {
     processProfilerResults(params);
+  }
+  else if (message === "Log.entryAdded")
+  {
+    processLogEntryAdded(params)
   }
 
 }
