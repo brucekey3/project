@@ -55,6 +55,10 @@ function setReportingStatus()
         // The data array doesn't exist yet, create it
         items.data = [{tabId: tabId, reporting: true}];
         reportingStatus = true;
+        chrome.storage.local.set(items, function() {
+            console.log('Data successfully saved to the storage!');
+        });
+        console.log(reportingStatus);
     }
 
     if (reportingStatus)
@@ -90,7 +94,7 @@ function toggleReportingStatus()
 
         if (!found)
         {
-          items.data.push({tabId: tabId, reporting: true})
+          items.data.push({tabId: tabId, reporting: true});
         }
     }
     else

@@ -79,6 +79,58 @@ function updateNumRequestsText()
   document.getElementById("numRequests").textContent = "Number of requests is: " + numRequests;
 }
 
+
+chrome.windows.onCreated.addListener(function(window) {
+  console.log("New window created");
+  console.dir(window);
+
+  chrome.tabs.get(tabId, function(tab) {
+    let container = getDomainReportContainer(tab.url);
+    let newTabReport = [];
+    let reportText = "";
+    let severity = SeverityEnum.UNKNOWN;
+    if (window.focused)
+    {
+      reportText = "New window created and is focused- if you did this then ignore this.";
+      severy = SeverityEnum.MILD;
+    }
+    else
+    {
+      reportText = "New window created - if you did this then ignore this.";
+      severity = SeverityEnum.LOW;
+    }
+    newTabReport.push(generateReport(reportText, severity));
+    container.addPathnameReport(tab.url, newTabReport);
+  });
+
+});
+
+chrome.tabs.onCreated.addListener(function(newTab) {
+
+  console.log("New tab created - is active: " + newTab.active);
+  console.dir(newTab);
+
+  chrome.tabs.get(tabId, function(tab) {
+    let container = getDomainReportContainer(tab.url);
+    let newTabReport = [];
+    let reportText = "";
+    let severity = SeverityEnum.UNKNOWN;
+    if (newTab.active)
+    {
+      reportText = "New window created and is active - if you did this then ignore this.";
+      severy = SeverityEnum.MILD;
+    }
+    else
+    {
+      reportText = "New window created - if you did this then ignore this.";
+      severity = SeverityEnum.LOW;
+    }
+    newTabReport.push(generateReport(reportText, severity));
+    container.addPathnameReport(tab.url, newTabReport);
+  });
+
+});
+
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
       // Only listen to messages for this tab
@@ -107,6 +159,22 @@ chrome.runtime.onMessage.addListener(
 
           let container = getDomainReportContainer(details.iniatiatorUrl);
           container.addPathnameReport(details.iniatiatorUrl, extensionReport, "Extension Install");
+        }
+      }
+      else if (request.message === "notificationsRequested")
+      {
+        let notificationsReport = [];
+        let details = request.data;
+        // If we have no details or no URL we cannot create a report
+        // The latter is since we need to know which domain container to add it
+        // to
+        if (details && details.iniatiatorUrl)
+        {
+          let reportString = "Page is requesting permission for notifications!";
+          notificationsReport.push(generateReport(reportString, SeverityEnum.MILD));
+
+          let container = getDomainReportContainer(details.iniatiatorUrl);
+          container.addPathnameReport(details.iniatiatorUrl, notificationsReport, "Notifications Requested");
         }
       }
       else if (request.message === "formProcessed")
@@ -215,7 +283,7 @@ window.addEventListener("load", function() {
   {
     initialise();
   }
-  console.log("Calling processDocument on load");
+  //console.log("Calling processDocument on load");
   processDocument(undefined);
 });
 
@@ -232,6 +300,9 @@ function monitorCpuUsage(lastUsage)
       resourcesDiv.removeChild(resourcesDiv.lastChild);
     }
 
+
+    let averageUserUsagePercentage = 0;
+
     for (let i in res.processors)
     {
       let userUsage = res.processors[i].usage.user
@@ -245,36 +316,53 @@ function monitorCpuUsage(lastUsage)
       let kernelUsagePercentage = ((kernelUsage - lastKernelUsage[i])/ totalUsageDiff)*100;
       let idleUsagePercentage   = ((idleUsage   - lastIdleUsage[i])  / totalUsageDiff)*100;
 
+      averageUserUsagePercentage += userUsagePercentage;
+
       let processorInfo = document.createElement("section");
       processorInfo.style.border = "thin solid black";
       let title = document.createElement("span");
       title.textContent = "Processor " + i + ":";
+
+      // Show the CPU usage for user process
       let user   = document.createElement("span");
       user.textContent = "User usage: " + userUsagePercentage + "%";
+
+      /*
       let kernel = document.createElement("span");
       kernel.textContent = "Kernel usage: " + kernelUsagePercentage + "%";
       let idle   = document.createElement("span");
       idle.textContent = "Idle usage: " + idleUsagePercentage + "%";
+      */
 
       if (userUsagePercentage > 70)
       {
-        user.style.backgroundColor = "red";
+        setSeverityAttributes(user, SeverityEnum.SEVERE);
         let warning = document.createElement("span");
-        warning.style.backgroundColor = "red";
+        setSeverityAttributes(warning, SeverityEnum.SEVERE);
         warning.textContent = "Warning - high CPU usage on processor " + i + ". "
                             + "This site may be mining cryptocurrency.";
         processorInfo.appendChild(warning);
         processorInfo.appendChild(document.createElement("br"));
+      }
+      else if (userUsagePercentage > 50)
+      {
+        setSeverityAttributes(user, SeverityEnum.MILD);
+      }
+      else if (userUsagePercentage > 30)
+      {
+        setSeverityAttributes(user, SeverityEnum.LOW);
       }
 
       processorInfo.appendChild(title);
       processorInfo.appendChild(document.createElement("br"));
       processorInfo.appendChild(user);
       processorInfo.appendChild(document.createElement("br"));
+      /*
       processorInfo.appendChild(kernel);
       processorInfo.appendChild(document.createElement("br"));
       processorInfo.appendChild(idle);
       processorInfo.appendChild(document.createElement("br"));
+      */
 
       resourcesDiv.appendChild(processorInfo);
       lastUserUsage[i]   = userUsage;
@@ -282,6 +370,42 @@ function monitorCpuUsage(lastUsage)
       lastIdleUsage[i]   = idleUsage;
       lastTotalUsage[i]  = totalUsage;
     }
+
+    averageUserUsagePercentage /= res.numOfProcessors;
+
+    let averageProcessorInfo = document.createElement("section");
+    averageProcessorInfo.style.border = "thin solid black";
+
+    // Show the Average CPU usage for user process over all processors
+    let averageUser   = document.createElement("span");
+    averageUser.textContent = "Average User usage: " + averageUserUsagePercentage + "%";
+    averageProcessorInfo.appendChild(averageUser);
+    averageProcessorInfo.appendChild(document.createElement("br"));
+
+    if (averageUserUsagePercentage > 70)
+    {
+      setSeverityAttributes(averageUser, SeverityEnum.SEVERE);
+    }
+    else if (averageUserUsagePercentage > 50)
+    {
+      setSeverityAttributes(averageUser, SeverityEnum.MILD);
+    }
+    else if (averageUserUsagePercentage > 30)
+    {
+      setSeverityAttributes(averageUser, SeverityEnum.LOW);
+    }
+
+    if (averageUserUsagePercentage > 30)
+    {
+      let averageWarning = document.createElement("span");
+      setSeverityAttributes(averageWarning, SeverityEnum.MILD);
+      averageWarning.textContent = "Warning - high average CPU usage. "
+                                 + "This site may be mining cryptocurrency.";
+      averageProcessorInfo.appendChild(averageWarning);
+      averageProcessorInfo.appendChild(document.createElement("br"));
+    }
+
+    resourcesDiv.appendChild(averageProcessorInfo);
 
     window.setTimeout(monitorCpuUsage.bind(null, 0), 2000)
   });
@@ -402,6 +526,14 @@ chrome.webRequest.onBeforeRequest.addListener(processRequest, {urls: ["<all_urls
 chrome.webRequest.onResponseStarted.addListener(processResponse, {urls: ["<all_urls>"]}, ["responseHeaders"]);
 
 function processRedirect(details) {
+  let redirectTabId = details.tabId;
+
+  // Ignore any redirects not related to this tab
+  if (redirectTabId !== -1 && redirectTabId !== tabId)
+  {
+    return;
+  }
+
   let requestId = details.requestId;
   let urlBeforeRedirect = details.url;
   let status = details.statusCode;
@@ -468,7 +600,7 @@ function processDocument(params)
 
   });
 
-
+  console.log("Analysing forms");
   chrome.tabs.executeScript(tabId, {
         file: 'scripts/analyseForms.js',
         allFrames: true,
@@ -484,7 +616,7 @@ function processLogEntryAdded(params)
 
   let entry = params.entry;
 
-  console.dir(entry);
+  //console.dir(entry);
   if (entry.level === "error")
   {
     console.log("Updating error count:" + numConsoleErrors);
@@ -515,7 +647,7 @@ function onEvent(debuggeeId, message, params) {
   }
   else if (message === "DOM.documentUpdated")
   {
-    console.log("calling processDocument on document update");
+    //console.log("calling processDocument on document update");
     processDocument(params);
   }
   else if (message === "Security.securityStateChanged")
@@ -1086,6 +1218,14 @@ function sendSafeBrowsingCheck(url)
 
 function processRequest(details)
 {
+  let requestTabId = details.tabId;
+
+  // Ignore any requests not related to this tab
+  if (requestTabId !== -1 && requestTabId !== tabId)
+  {
+    return;
+  }
+
   numRequests += 1;
   updateNumRequestsText();
 
@@ -1127,6 +1267,14 @@ function processResponse(details)
     console.log("processResponse called with no params");
     return;
   }
+  let responseTabId = details.tabId;
+
+  // Ignore any responses not related to this tab
+  if (responseTabId !== -1 && responseTabId !== tabId)
+  {
+    return;
+  }
+
 
   let url = details.url;
 

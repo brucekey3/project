@@ -32,8 +32,29 @@ function onLoad(e) {
      }
      let extensionId = response.extensionId;
      injectChromeWebstoreInstallHook(extensionId);
+     injectNotificationHook(extensionId);
    });
 
+}
+
+function injectNotificationHook(extensionId)
+{
+  let functionToInject = function(extensionId)
+  {
+    let store = Notification.requestPermission;
+    Notification.requestPermission = function(callback) {
+      let detailObj = {};
+      detailObj.iniatiatorUrl = document.location.href;
+      document.honeyBrowserEvent = new CustomEvent('Event', {detail: {
+        message: "notificationsRequested",
+        data: detailObj
+      }});
+      document.honeyBrowserEvent.initEvent('hookEvent');
+      document.dispatchEvent(document.honeyBrowserEvent);
+      return store(callback);
+    };
+  };
+  injectFunction(functionToInject, extensionId);
 }
 
 function injectChromeWebstoreInstallHook(extensionId)

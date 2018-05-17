@@ -34,9 +34,18 @@ body {
  {
   border-style: solid;
   border-radius: 16px;
+  padding-left: 5pt;
   padding-bottom: 10pt;
  }
 
  .domainContainer
  {
+  border: solid 5px;
+  padding-bottom: 10pt;
+  padding-left: 5pt;
+  padding-top: 10pt;
  }
+
+ domainContainer + domainContainer {
+    margin-top: 10px;
+}

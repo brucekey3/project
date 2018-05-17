@@ -151,7 +151,7 @@ class DomainContainer
 
   buildDomainContainer(domain)
   {
-    if (domain == "")
+    if (domain === "")
     {
       return undefined;
     }
