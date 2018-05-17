@@ -36,23 +36,31 @@ mining cryptocurrency on the user's computer.
 * When a redirect is received, this is flagged to the user with the status code and the URLs that are being directed from and to. Severity is increased if the redirect changes domain. The number of redirects is also kept track of since a high number can be suspicious.
 
 ### Static Analysis
-In scripts it looks for:
+
+#### Script Analysis
+
 *  "chrome.webstore.install" which indicates an extension will be installed.
 * "document.location" functions which indicates a possible redirection
 * Presence of "exec" and "unescape" (Although this is not currently shown in the results yet #ToDo)
 
-In the document (on every time it is refreshed):
+#### Document Analysis (on every time it is refreshed):
 * Finds all inputs on the page and checks for any of type "password" and if any are found a warning is issued that the page may ask for password input.
 * Also checks description of input nodes for "pass" to find password inputs.
 
 ### Dynamic Analysis
-* "Chrome.webstore.install" is hooked and when called a warning will be displayed that the page is trying to install an extension and relevant information is displayed such as where the install originated from and what the URL is of the install.
 
 * When a download starts a warning is displayed and and known details are displayed with it. The URL which initiated the download is displayed and any suspicious details are shown (which are automatically detected by the Chrome browser).
 
 * The "security state" of the page is monitored and displayed to the user and is updated on any change. This includes information on whether the page is loaded over a secure conenction, whether there is mixed content and any explanations about why the site may not be secure.
 
 * Keeps track of and displays the number of console messaged flagged as warnings or errors of the page.
+
+#### Function hooks
+
+* "Chrome.webstore.install" is hooked and when called a warning will be displayed that the page is trying to install an extension and relevant information is displayed such as where the install originated from and what the URL is of the install.
+
+* "Notifications.requestPermission" is hooked and when called a warning will be displayed that the page is trying to request permission to send notifications to the user.
+
 
 ### Anti-Phishing
 * Any forms on the page which are not search forms are filled in with dummy values and submitted. If there is a resulting redirect then a warning is displayed in the report window since this is a sign that the page has perceived the action as successful when it should not have been. Benign pages normally respond with 200 OK and display errors on the page but will sometimes redirect to another page with a captcha, for example, so this method is not foolproof. At the moment the form filling is limited to 'select' tags and inputs labelled as email and password. Any unknown inputs are labelled with simpler non-specific text.
