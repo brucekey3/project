@@ -8,7 +8,10 @@ System resource usage is not per tab so visiting multiple tabs at the same time 
 ### CPU usage monitoring
 * Monitors cumulative user, kernel and idle CPU usage time for each processor, works out the difference between measurements and translates this into a percentage. Greater than 70% user usage is considered worth a warning since the site may be
 mining cryptocurrency on the user's computer.
-* Percentages are displayed to the user for each core.
+
+* User usage percentages are displayed to the user for each core.
+
+* Average user usage over all processors is also displayed
 
 ### Request Processing
 
