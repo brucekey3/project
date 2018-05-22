@@ -603,10 +603,10 @@ function processRedirect(details) {
 var expressionString = `
 var isOverlap = function(rect1, rect2)
 {
-  var overlap = !(rect1.right < rect2.left ||
-          rect1.left > rect2.right ||
-          rect1.bottom < rect2.top ||
-          rect1.top > rect2.bottom);
+  var overlap = !(rect1.right <= rect2.left ||
+          rect1.left >= rect2.right ||
+          rect1.bottom <= rect2.top ||
+          rect1.top >= rect2.bottom);
 
   if (overlap)
   {
@@ -659,10 +659,12 @@ var isVisible = function(elem)
   let current_color = styles.getPropertyValue("background-color").replace(/\\s/g, '');
   let match = /rgba?\\((\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*(,\\s*\\d+[\\.\\d+]*)*\\)/g.exec(current_color);
 
+  /*
   console.dir(current_color);
   console.dir(match);
   console.log(opacity);
   console.log(styles.display);
+  */
 
   if (match && match.length > 0 && match[0] === "rgba(0,0,0,0)")
   {
@@ -706,23 +708,22 @@ var isVisible = function(elem)
             let vis2 = isVisible(elem2);
             if ((vis1 && !vis2) || (!vis1 && vis2))
             {
-              if (!overlapResults[elem])
+              let json = JSON.stringify({html: elem.outerHTML});
+              let json2= JSON.stringify({html: elem2.outerHTML});
+              if (!overlapResults[json])
               {
-                overlapResults[elem] = [];
+                overlapResults[json] = [];
               }
-              overlapResults[elem].push(elem2);
+
+              overlapResults[json].push(json2);
             }
           }
         }
       }
     }
   }
-  chrome.runtime.sendMessage({
-    message: "clickJackAnalysis",
-    data: {
-      overlaps: overlapResults
-    }
-  });
+
+  console.dir(overlapResults);
   overlapResults;
 `;
 
@@ -761,8 +762,32 @@ function processDocument(params)
                                   returnByValue: true
                                 },
       function (result, exceptionDetails){
-        console.dir(result.result.value);
+        let overlapResults = result.result.value;
+        console.dir(overlapResults);
         console.dir(exceptionDetails);
+
+        for (var result in overlapResults)
+        {
+          if (overlapResults.hasOwnProperty(result))
+          {
+            let res = "";
+            let resultHtml = JSON.parse(result).html;
+
+
+            let elem1 = document.createElement("div");
+            elem1.innerHTML = resultHtml;
+            console.dir(elem1.firstElementChild);
+
+            for (overlap of overlapResults[result])
+            {
+              let overlapResultsHtml = JSON.parse(overlap).html;
+              let elem2 = document.createElement("div");
+              elem2.innerHTML = overlapResultsHtml;
+              console.dir(elem2.firstElementChild);
+            }
+          }
+        }
+
 
       }
     );
