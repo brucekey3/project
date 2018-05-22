@@ -112,6 +112,24 @@ chrome.runtime.onMessage.addListener(
         "data": request.data
       });
     }
+    else if (request.message ===  "clickJackAnalysis")
+    {
+      let tabId = sender.tab.id;
+      console.log("Content message received: " + request.data);
+      chrome.tabs.sendMessage(tabId, {
+        "message": "clickJackAnalysis",
+        "data": request.data
+      });
+    }
+    else if (request.message ===  "windowOpen")
+    {
+      let tabId = sender.tab.id;
+      console.log("Content message received: " + request.data);
+      chrome.tabs.sendMessage(tabId, {
+        "message": "windowOpen",
+        "data": request.data
+      });
+    }
     else if (request.message === "checkForms")
     {
       console.log("Content message received checkForms");
