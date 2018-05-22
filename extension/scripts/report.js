@@ -723,7 +723,6 @@ var isVisible = function(elem)
     }
   }
 
-  console.dir(overlapResults);
   overlapResults;
 `;
 
@@ -766,6 +765,8 @@ function processDocument(params)
         console.dir(overlapResults);
         console.dir(exceptionDetails);
 
+        let clickJackReport = [];
+
         for (var result in overlapResults)
         {
           if (overlapResults.hasOwnProperty(result))
@@ -773,10 +774,14 @@ function processDocument(params)
             let res = "";
             let resultHtml = JSON.parse(result).html;
 
-
             let elem1 = document.createElement("div");
             elem1.innerHTML = resultHtml;
             console.dir(elem1.firstElementChild);
+            console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
+
+            let reportString = "";
+            reportString += elem1.firstElementChild.tagName + " overlaps with "
+                         + overlapResults[result].length + " elements";
 
             for (overlap of overlapResults[result])
             {
@@ -784,9 +789,17 @@ function processDocument(params)
               let elem2 = document.createElement("div");
               elem2.innerHTML = overlapResultsHtml;
               console.dir(elem2.firstElementChild);
+              reportString += ", " + elem2.firstElementChild.tagName;
             }
+
+            clickJackReport.push(generateReport(reportString, SeverityEnum.LOW));
           }
         }
+
+        chrome.tabs.get(tabId, function(tab) {
+          let container = getDomainReportContainer(tab.url);
+          container.addPathnameReport(tab.url, clickJackReport, "clickjack");
+        })
 
 
       }
