@@ -261,6 +261,8 @@ function initialise()
   chrome.debugger.sendCommand({tabId:tabId}, "Debugger.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
+  //chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.enable");
+
   chrome.debugger.sendCommand({tabId:tabId}, "Runtime.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Page.enable");
 
@@ -279,6 +281,8 @@ function deinitialise()
   chrome.debugger.sendCommand({tabId:tabId}, "Debugger.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  //chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.disable");
+
   chrome.debugger.sendCommand({tabId:tabId}, "Runtime.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Page.disable");
 
@@ -773,65 +777,144 @@ function processDocument(params)
         allFrames: true,
   });
   */
+  let snapshotParams = {
+    computedStyleWhitelist: ["opacity", "display", "background-color"],
+    includeEventListeners: true,
+    includePaintOrder: false,
+    includeUserAgentShadowTree: false // Not sure whether I need this?
+  };
+  chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.getSnapshot",
+                              snapshotParams, processSnapshot);
 
+  chrome.debugger.sendCommand({tabId:tabId}, "Runtime.evaluate",
+                              {
+                                expression: expressionString,
+                                includeCommandLineAPI: true,
+                                returnByValue: true
+                              },
+    function (result, exceptionDetails){
+      let overlapResults = result.result.value;
+      console.dir(overlapResults);
+      console.dir(exceptionDetails);
 
-    chrome.debugger.sendCommand({tabId:tabId}, "Runtime.evaluate",
-                                {
-                                  expression: expressionString,
-                                  includeCommandLineAPI: true,
-                                  returnByValue: true
-                                },
-      function (result, exceptionDetails){
-        let overlapResults = result.result.value;
-        console.dir(overlapResults);
-        console.dir(exceptionDetails);
+      let clickJackReport = [];
 
-        let clickJackReport = [];
-
-        for (var result in overlapResults)
+      for (var result in overlapResults)
+      {
+        if (overlapResults.hasOwnProperty(result))
         {
-          if (overlapResults.hasOwnProperty(result))
+          let res = "";
+          let obj = JSON.parse(result);
+          let resultHtml = obj.html;
+
+          let elem1 = document.createElement("div");
+          elem1.innerHTML = resultHtml;
+          console.dir(elem1.firstElementChild);
+          console.dir(obj.clickListeners);
+          clickJackReport = clickJackReport.concat(analyseListeners(obj.clickListeners));
+          console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
+
+          let reportString = "";
+          reportString += elem1.firstElementChild.tagName + " overlaps with "
+                       + overlapResults[result].length + " elements";
+
+          for (overlap of overlapResults[result])
           {
-            let res = "";
-            let obj = JSON.parse(result);
-            let resultHtml = obj.html;
+            let obj2 = JSON.parse(overlap);
+            let overlapResultsHtml = obj2.html;
+            let elem2 = document.createElement("div");
+            elem2.innerHTML = overlapResultsHtml;
+            //console.dir(elem2.firstElementChild);
+            //console.dir(obj2.clickListeners);
+            clickJackReport = clickJackReport.concat(analyseListeners(obj2.clickListeners));
+            reportString += ", " + elem2.firstElementChild.tagName;
+          }
 
-            let elem1 = document.createElement("div");
-            elem1.innerHTML = resultHtml;
-            console.dir(elem1.firstElementChild);
-            console.dir(obj.clickListeners);
-            clickJackReport = clickJackReport.concat(analyseListeners(obj.clickListeners));
-            console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
+          clickJackReport.push(generateReport(reportString, SeverityEnum.LOW));
+        }
+      }
 
-            let reportString = "";
-            reportString += elem1.firstElementChild.tagName + " overlaps with "
-                         + overlapResults[result].length + " elements";
+      chrome.tabs.get(tabId, function(tab) {
+        let container = getDomainReportContainer(tab.url);
+        container.addPathnameReport(tab.url, clickJackReport, "clickjack");
+      })
 
-            for (overlap of overlapResults[result])
+
+    }
+  );
+
+}
+
+function processSnapshot(result)
+{
+  let domNodes = result.domNodes;
+  let layoutTreeNodes = result.layoutTreeNodes;
+  let computedStyles = result.computedStyles;
+
+  console.dir(domNodes);
+  console.dir(computedStyles);
+
+  let clickElems = [];
+
+  // Get all clickable Elements
+  for (node of domNodes)
+  {
+    if (node.isClickable)
+    {
+      clickElems.push(node);
+    }
+  }
+
+  // Get all elements which overlap
+  var overlapResults = [];
+  for (let i = 0; i < clickElems.length; i++)
+  {
+    let elem = clickElems[i];
+    for (let j = i; j < clickElems.length; j++)
+    {
+      let elem2 = clickElems[j];
+      if (elem != elem2)
+      {
+        let layoutNode1 = layoutTreeNodes[elem.layoutNodeIndex];
+        let layoutNode2 = layoutTreeNodes[elem2.layoutNodeIndex];
+
+        let rect1 = layoutNode1.boundingBox;
+        let rect2 = layoutNode2.boundingBox;
+
+        if (rect1 && rect2)
+        {
+          let overlaps = isOverlap(rect1, rect2);
+          if (overlaps)
+          {
+            let styleNode1 = {};
+            let styleNode2 = {};
+            if (computedStyles[elem.styleIndex])
             {
-              let obj2 = JSON.parse(overlap);
-              let overlapResultsHtml = obj2.html;
-              let elem2 = document.createElement("div");
-              elem2.innerHTML = overlapResultsHtml;
-              //console.dir(elem2.firstElementChild);
-              //console.dir(obj2.clickListeners);
-              clickJackReport = clickJackReport.concat(analyseListeners(obj2.clickListeners));
-              reportString += ", " + elem2.firstElementChild.tagName;
+              computedStyles[elem.styleIndex].properties.forEach(function(x) { styleNode1[x.name] = x.value});
             }
 
-            clickJackReport.push(generateReport(reportString, SeverityEnum.LOW));
+            if (computedStyles[elem2.styleIndex])
+            {
+              computedStyles[elem2.styleIndex].properties.forEach(function(x) { styleNode2[x.name] = x.value});;
+            }
+
+            let vis1 = isVisible(styleNode1);
+            let vis2 = isVisible(styleNode2);
+
+            if ((vis1 && !vis2) || (!vis1 && vis2))
+            {
+              let events1 = getClickListeners(elem);
+              let events2 = getClickListeners(elem2);
+
+              console.dir(events1);
+              console.dir(events2);
+
+            }
           }
         }
-
-        chrome.tabs.get(tabId, function(tab) {
-          let container = getDomainReportContainer(tab.url);
-          container.addPathnameReport(tab.url, clickJackReport, "clickjack");
-        })
-
-
       }
-    );
-
+    }
+  }
 }
 
 function analyseListeners(listeners)

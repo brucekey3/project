@@ -1,9 +1,9 @@
 var isOverlap = function(rect1, rect2)
 {
-  var overlap = !(rect1.right < rect2.left ||
-          rect1.left > rect2.right ||
-          rect1.bottom < rect2.top ||
-          rect1.top > rect2.bottom);
+  var overlap = !(rect1.right <= rect2.left ||
+          rect1.left >= rect2.right ||
+          rect1.bottom <= rect2.top ||
+          rect1.top >= rect2.bottom);
 
   if (overlap)
   {
@@ -49,11 +49,10 @@ var gatherClickElements = function(curnode, gathered)
     });
 };
 
-var isVisible = function(elem)
+var isVisible = function(styles)
 {
-  let styles = window.getComputedStyle(elem);
-  let opacity = styles.getPropertyValue("opacity");
-  let current_color = styles.getPropertyValue("background-color").replace(/\\s/g, '');
+  let opacity = styles["opacity"];
+  let current_color = (styles["background-color"] || "").replace(/\\s/g, '');
   let match = /rgba?\\((\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*(,\\s*\\d+[\\.\\d+]*)*\\)/g.exec(current_color);
 
   /*
@@ -72,7 +71,7 @@ var isVisible = function(elem)
     return false;
   }
 
-  if (styles.display === 'none')
+  if (styles["display"] === 'none')
   {
     return false;
   }
@@ -80,45 +79,64 @@ var isVisible = function(elem)
   return true;
 }
 
-
-  var clickElems = [];
-  gatherClickElements(document.documentElement, clickElems);
-
-  var overlapResults = {};
-  for (let i = 0; i < clickElems.length; i++)
+var getClickListeners = function(elem)
+{
+  let res = [];
+  let events = elem.eventListeners;
+  if (events)
   {
-    let elem = clickElems[i];
-    for (let j = i; j < clickElems.length; j++)
+    for (event of events)
     {
-      let elem2 = clickElems[j];
-      if (elem != elem2)
+      if (event.type === "click")
       {
-        let rect1 = elem.getBoundingClientRect();
-        let rect2 = elem2.getBoundingClientRect();
+        res.push(event);
+      }
+    }
+  }
+  return res;
+}
+/*
+var clickElems = [];
+gatherClickElements(document.documentElement, clickElems);
 
-        if (rect1 && rect2)
+var overlapResults = {};
+for (let i = 0; i < clickElems.length; i++)
+{
+  let elem = clickElems[i];
+  for (let j = i; j < clickElems.length; j++)
+  {
+    let elem2 = clickElems[j];
+    if (elem != elem2)
+    {
+      let rect1 = elem.getBoundingClientRect();
+      let rect2 = elem2.getBoundingClientRect();
+
+      if (rect1 && rect2)
+      {
+        let overlaps = isOverlap(rect1, rect2);
+        if (overlaps)
         {
-          let overlaps = isOverlap(rect1, rect2);
-          if (overlaps)
+          let vis1 = isVisible(elem);
+          let vis2 = isVisible(elem2);
+          if ((vis1 && !vis2) || (!vis1 && vis2))
           {
-            let vis1 = isVisible(elem);
-            let vis2 = isVisible(elem2);
-            if ((vis1 && !vis2) || (!vis1 && vis2))
-            {
-              let json = JSON.stringify({html: elem.outerHTML});
-              let json2= JSON.stringify({html: elem2.outerHTML});
-              if (!overlapResults[json])
-              {
-                overlapResults[json] = [];
-              }
+            getClickListeners(elem);
+            getClickListeners(elem2);
 
-              overlapResults[json].push(json2);
+            let json = JSON.stringify({html: elem.outerHTML, clickListeners: getClickListeners(elem)});
+            let json2= JSON.stringify({html: elem2.outerHTML, clickListeners: getClickListeners(elem2)});
+            if (!overlapResults[json])
+            {
+              overlapResults[json] = [];
             }
+
+            overlapResults[json].push(json2);
           }
         }
       }
     }
   }
+}
 
-  console.dir(overlapResults);
-  overlapResults;
+overlapResults;
+  */
