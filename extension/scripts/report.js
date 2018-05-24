@@ -105,6 +105,7 @@ chrome.windows.onCreated.addListener(function(window) {
 
 });
 
+/*
 chrome.tabs.onCreated.addListener(function(newTab) {
 
   console.log("New tab created - is active: " + newTab.active);
@@ -130,7 +131,7 @@ chrome.tabs.onCreated.addListener(function(newTab) {
   });
 
 });
-
+*/
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
       // Only listen to messages for this tab
@@ -257,9 +258,11 @@ function beginAnalysis()
 
 function initialise()
 {
+  chrome.debugger.sendCommand({tabId:tabId}, "Debugger.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Runtime.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Page.enable");
 
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
@@ -273,9 +276,11 @@ function initialise()
 
 function deinitialise()
 {
+  chrome.debugger.sendCommand({tabId:tabId}, "Debugger.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Runtime.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Page.disable");
 
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
@@ -683,6 +688,19 @@ var isVisible = function(elem)
   return true;
 }
 
+var getClickListeners = function(elem)
+{
+  let res = [];
+  let events = getEventListeners(elem);
+  if (events && events.click)
+  {
+    for (event of events.click)
+    {
+      res.push(event.listener.toString());
+    }
+  }
+  return res;
+}
 
   var clickElems = [];
   gatherClickElements(document.documentElement, clickElems);
@@ -708,8 +726,11 @@ var isVisible = function(elem)
             let vis2 = isVisible(elem2);
             if ((vis1 && !vis2) || (!vis1 && vis2))
             {
-              let json = JSON.stringify({html: elem.outerHTML});
-              let json2= JSON.stringify({html: elem2.outerHTML});
+              getClickListeners(elem);
+              getClickListeners(elem2);
+
+              let json = JSON.stringify({html: elem.outerHTML, clickListeners: getClickListeners(elem)});
+              let json2= JSON.stringify({html: elem2.outerHTML, clickListeners: getClickListeners(elem2)});
               if (!overlapResults[json])
               {
                 overlapResults[json] = [];
@@ -772,11 +793,14 @@ function processDocument(params)
           if (overlapResults.hasOwnProperty(result))
           {
             let res = "";
-            let resultHtml = JSON.parse(result).html;
+            let obj = JSON.parse(result);
+            let resultHtml = obj.html;
 
             let elem1 = document.createElement("div");
             elem1.innerHTML = resultHtml;
             console.dir(elem1.firstElementChild);
+            console.dir(obj.clickListeners);
+            clickJackReport = clickJackReport.concat(analyseListeners(obj.clickListeners));
             console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
 
             let reportString = "";
@@ -785,10 +809,13 @@ function processDocument(params)
 
             for (overlap of overlapResults[result])
             {
-              let overlapResultsHtml = JSON.parse(overlap).html;
+              let obj2 = JSON.parse(overlap);
+              let overlapResultsHtml = obj2.html;
               let elem2 = document.createElement("div");
               elem2.innerHTML = overlapResultsHtml;
-              console.dir(elem2.firstElementChild);
+              //console.dir(elem2.firstElementChild);
+              //console.dir(obj2.clickListeners);
+              clickJackReport = clickJackReport.concat(analyseListeners(obj2.clickListeners));
               reportString += ", " + elem2.firstElementChild.tagName;
             }
 
@@ -805,6 +832,28 @@ function processDocument(params)
       }
     );
 
+}
+
+function analyseListeners(listeners)
+{
+  let listenerReport = [];
+  for (listener of listeners)
+  {
+    let analysis = static_analysis(listener);
+    console.dir(analysis);
+    listenerReport = listenerReport.concat(processAnalysis(analysis));
+  }
+  return listenerReport;
+}
+
+function processAnalysis(analysis)
+{
+  let analysisReport = [];
+  if (analysis.windowOpen > 0)
+  {
+    analysisReport.push(generateReport("May open a new window", SeverityEnum.LOW));
+  }
+  return analysisReport;
 }
 
 function processLogEntryAdded(params)
@@ -867,14 +916,54 @@ function onEvent(debuggeeId, message, params) {
   {
     processProfilerResults(params);
   }
+  else if (message === "Page.windowOpen")
+  {
+    // #ToDo
+    processWindowOpen(params);
+  }
   else if (message === "Log.entryAdded")
   {
     processLogEntryAdded(params)
   }
+  else if (message === "Debugger.scriptParsed")
+  {
+    if(params.url !== "" && params.url.indexOf("extension") === -1)
+    {
+      console.log("script parsed");
+      console.dir(params);
+    }
+  }
 
 }
 
+function processWindowOpen(params)
+{
+  let url = params.url;
+  let windowName = params.windowName;
+  let windowFeatures = params.windowFeatures; // Array
+  let triggeredByUserGesture = params.userGesture;
 
+  console.log("Window opened");
+  console.dir(params);
+
+  let container = getDomainReportContainer(url);
+  let newTabReport = [];
+  let reportText = "";
+  let severity = SeverityEnum.UNKNOWN;
+  if (triggeredByUserGesture)
+  {
+    reportText = "Window opened to this domain - caused by user gesture. \n";
+    reportText += "If this was intentional ignore this.";
+    severity = SeverityEnum.LOW;
+  }
+  else
+  {
+    reportText = "Window opened to this domain - NOT caused by user gesture.";
+    severity = SeverityEnum.HIGH;
+  }
+  newTabReport.push(generateReport(reportText, severity));
+  container.addPathnameReport(url, newTabReport, "windowOpen");
+}
 
 function processInitialResponse(params)
 {
