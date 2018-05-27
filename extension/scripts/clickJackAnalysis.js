@@ -52,15 +52,8 @@ var gatherClickElements = function(curnode, gathered)
 var isVisible = function(styles)
 {
   let opacity = styles["opacity"];
-  let current_color = (styles["background-color"] || "").replace(/\\s/g, '');
-  let match = /rgba?\\((\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*(,\\s*\\d+[\\.\\d+]*)*\\)/g.exec(current_color);
-
-  /*
-  console.dir(current_color);
-  console.dir(match);
-  console.log(opacity);
-  console.log(styles.display);
-  */
+  let current_color = (styles["background-color"] || "").replace(/\s/g, '');
+  let match = /rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(,\s*\d+[\.\d+]*)*\)/g.exec(current_color);
 
   if (match && match.length > 0 && match[0] === "rgba(0,0,0,0)")
   {

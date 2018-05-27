@@ -258,7 +258,9 @@ function beginAnalysis()
 
 function initialise()
 {
-  chrome.debugger.sendCommand({tabId:tabId}, "Debugger.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Debugger.enable", function() {
+    chrome.debugger.sendCommand({tabId:tabId}, "DOMDebugger.setEventListenerBreakpoint", {eventName: "click", targetName: "*"});
+  });
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
   //chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.enable");
@@ -786,6 +788,7 @@ function processDocument(params)
   chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.getSnapshot",
                               snapshotParams, processSnapshot);
 
+/*
   chrome.debugger.sendCommand({tabId:tabId}, "Runtime.evaluate",
                               {
                                 expression: expressionString,
@@ -794,8 +797,8 @@ function processDocument(params)
                               },
     function (result, exceptionDetails){
       let overlapResults = result.result.value;
-      console.dir(overlapResults);
-      console.dir(exceptionDetails);
+      //console.dir(overlapResults);
+      //console.dir(exceptionDetails);
 
       let clickJackReport = [];
 
@@ -809,10 +812,10 @@ function processDocument(params)
 
           let elem1 = document.createElement("div");
           elem1.innerHTML = resultHtml;
-          console.dir(elem1.firstElementChild);
-          console.dir(obj.clickListeners);
+          //console.dir(elem1.firstElementChild);
+          //console.dir(obj.clickListeners);
           clickJackReport = clickJackReport.concat(analyseListeners(obj.clickListeners));
-          console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
+          //console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
 
           let reportString = "";
           reportString += elem1.firstElementChild.tagName + " overlaps with "
@@ -837,11 +840,11 @@ function processDocument(params)
       chrome.tabs.get(tabId, function(tab) {
         let container = getDomainReportContainer(tab.url);
         container.addPathnameReport(tab.url, clickJackReport, "clickjack");
-      })
-
+      });
 
     }
   );
+  */
 
 }
 
@@ -851,10 +854,17 @@ function processSnapshot(result)
   let layoutTreeNodes = result.layoutTreeNodes;
   let computedStyles = result.computedStyles;
 
-  console.dir(domNodes);
-  console.dir(computedStyles);
+  // console.log("domNodes");
+  // console.dir(domNodes);
+  //
+  // console.log("layoutTreeNodes");
+  // console.dir(layoutTreeNodes);
+  //
+  // console.log("computedStyles");
+  // console.dir(computedStyles);
 
   let clickElems = [];
+  let eventReport = [];
 
   // Get all clickable Elements
   for (node of domNodes)
@@ -863,67 +873,136 @@ function processSnapshot(result)
     {
       clickElems.push(node);
     }
-  }
 
+    if (node.eventListeners)
+    {
+      for (event of node.eventListeners)
+      {
+        if (event.type  === "mousemove")
+        {
+          let reportString = node.nodeName + " is listening to mousemove event."
+          eventReport.push(generateReport(reportString, SeverityEnum.LOW));
+        }
+      }
+    }
+  }
+  chrome.tabs.get(tabId, function(tab) {
+    let container = getDomainReportContainer(tab.url);
+    container.addPathnameReport(tab.url, eventReport);
+  });
+
+  let maxOverlapResults = 0;
   // Get all elements which overlap
-  var overlapResults = [];
   for (let i = 0; i < clickElems.length; i++)
   {
     let elem = clickElems[i];
+    let overlapResults = [];
+    overlapResults.push(elem);
     for (let j = i; j < clickElems.length; j++)
     {
       let elem2 = clickElems[j];
-      if (elem != elem2)
+      if (elem.backendNodeId != elem2.backendNodeId)
       {
-        let layoutNode1 = layoutTreeNodes[elem.layoutNodeIndex];
-        let layoutNode2 = layoutTreeNodes[elem2.layoutNodeIndex];
-
-        let rect1 = layoutNode1.boundingBox;
-        let rect2 = layoutNode2.boundingBox;
-
-        if (rect1 && rect2)
+        if (elem.layoutNodeIndex && elem2.layoutNodeIndex)
         {
+          let layoutNode1 = layoutTreeNodes[elem.layoutNodeIndex];
+          let layoutNode2 = layoutTreeNodes[elem2.layoutNodeIndex];
+          let rect1 = layoutNode1.boundingBox;
+          let rect2 = layoutNode2.boundingBox;
+
           let overlaps = isOverlap(rect1, rect2);
           if (overlaps)
           {
             let styleNode1 = {};
             let styleNode2 = {};
-            if (computedStyles[elem.styleIndex])
+            if (computedStyles[layoutNode1.styleIndex])
             {
-              computedStyles[elem.styleIndex].properties.forEach(function(x) { styleNode1[x.name] = x.value});
+              computedStyles[layoutNode1.styleIndex].properties.forEach(function(x) { styleNode1[x.name] = x.value});
             }
 
-            if (computedStyles[elem2.styleIndex])
+            if (computedStyles[layoutNode2.styleIndex])
             {
-              computedStyles[elem2.styleIndex].properties.forEach(function(x) { styleNode2[x.name] = x.value});;
+              computedStyles[layoutNode2.styleIndex].properties.forEach(function(x) { styleNode2[x.name] = x.value});;
             }
 
             let vis1 = isVisible(styleNode1);
             let vis2 = isVisible(styleNode2);
+
 
             if ((vis1 && !vis2) || (!vis1 && vis2))
             {
               let events1 = getClickListeners(elem);
               let events2 = getClickListeners(elem2);
 
-              console.dir(events1);
-              console.dir(events2);
-
+              //console.dir(events1);
+              //console.dir(events2);
+              overlapResults.push(elem2);
             }
           }
         }
       }
     }
+
+    // If we have found an overlap then process this
+    if (overlapResults.length > 1 && overlapResults.length > maxOverlapResults)
+    {
+      maxOverlapResults = overlapResults.length;
+      processOverlapResults(overlapResults);
+    }
   }
 }
 
+function processRunScriptResult(result, exceptionDetails)
+{
+  console.dir(result);
+  console.dir(exceptionDetails);
+}
+
+function processOverlapResults(overlapResults)
+{
+  console.dir(overlapResults);
+  let clickJackReport = [];
+  let reportString = "Click-jacking warning - " + overlapResults.length
+                   + " clickable elements overlap: including \n";
+
+  for (result of overlapResults)
+  {
+    //clickJackReport = clickJackReport.concat(analyseListeners(result.clickListeners));
+    console.dir(result.eventListeners);
+    if (result.eventListeners)
+    {
+      // #ToDo: Check scripts maybe
+      /*
+      for (listener of result.eventListeners)
+      {
+        let runScriptParams = {
+          scriptId: listener.scriptId,
+          returnByValue: true,
+          generatePreview: true,
+        };
+        chrome.debugger.sendCommand({tabId:tabId}, "Runtime.runScript",
+                                    runScriptParams, processRunScriptResult);
+      }
+      */
+    }
+    reportString += ", " + result.nodeName;
+  }
+  clickJackReport.push(generateReport(reportString, SeverityEnum.LOW));
+
+  chrome.tabs.get(tabId, function(tab) {
+    let container = getDomainReportContainer(tab.url);
+    container.addPathnameReport(tab.url, clickJackReport, "Click-jacking");
+  });
+}
+
+// #ToDo: change this to use scriptIds
 function analyseListeners(listeners)
 {
   let listenerReport = [];
   for (listener of listeners)
   {
     let analysis = static_analysis(listener);
-    console.dir(analysis);
+    //console.dir(analysis);
     listenerReport = listenerReport.concat(processAnalysis(analysis));
   }
   return listenerReport;
@@ -1012,9 +1091,16 @@ function onEvent(debuggeeId, message, params) {
   {
     if(params.url !== "" && params.url.indexOf("extension") === -1)
     {
-      console.log("script parsed");
-      console.dir(params);
+      // #ToDo: this
+      //console.log("script parsed");
+      //console.dir(params);
     }
+  }
+  else if (message === "Debugger.paused")
+  {
+    console.dir(params);
+
+    chrome.debugger.sendCommand({tabId:tabId}, "Debugger.resume");
   }
 
 }
