@@ -29,6 +29,7 @@ function onLoad(e) {
       if (!response) {
         return;
       }
+
       let extensionId = response.extensionId;
       injectChromeWebstoreInstallHook(extensionId);
       injectNotificationHook(extensionId);

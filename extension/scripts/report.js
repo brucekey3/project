@@ -773,12 +773,7 @@ function processDocument(params)
   });
 
   console.log("Looking for clickjacking");
-  /*
-  chrome.tabs.executeScript(tabId, {
-        file: 'scripts/clickJackAnalysis.js',
-        allFrames: true,
-  });
-  */
+
   let snapshotParams = {
     computedStyleWhitelist: ["opacity", "display", "background-color"],
     includeEventListeners: true,
@@ -787,65 +782,6 @@ function processDocument(params)
   };
   chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.getSnapshot",
                               snapshotParams, processSnapshot);
-
-/*
-  chrome.debugger.sendCommand({tabId:tabId}, "Runtime.evaluate",
-                              {
-                                expression: expressionString,
-                                includeCommandLineAPI: true,
-                                returnByValue: true
-                              },
-    function (result, exceptionDetails){
-      let overlapResults = result.result.value;
-      //console.dir(overlapResults);
-      //console.dir(exceptionDetails);
-
-      let clickJackReport = [];
-
-      for (var result in overlapResults)
-      {
-        if (overlapResults.hasOwnProperty(result))
-        {
-          let res = "";
-          let obj = JSON.parse(result);
-          let resultHtml = obj.html;
-
-          let elem1 = document.createElement("div");
-          elem1.innerHTML = resultHtml;
-          //console.dir(elem1.firstElementChild);
-          //console.dir(obj.clickListeners);
-          clickJackReport = clickJackReport.concat(analyseListeners(obj.clickListeners));
-          //console.log("This Element overlaps with " + overlapResults[result].length + " elements: ");
-
-          let reportString = "";
-          reportString += elem1.firstElementChild.tagName + " overlaps with "
-                       + overlapResults[result].length + " elements";
-
-          for (overlap of overlapResults[result])
-          {
-            let obj2 = JSON.parse(overlap);
-            let overlapResultsHtml = obj2.html;
-            let elem2 = document.createElement("div");
-            elem2.innerHTML = overlapResultsHtml;
-            //console.dir(elem2.firstElementChild);
-            //console.dir(obj2.clickListeners);
-            clickJackReport = clickJackReport.concat(analyseListeners(obj2.clickListeners));
-            reportString += ", " + elem2.firstElementChild.tagName;
-          }
-
-          clickJackReport.push(generateReport(reportString, SeverityEnum.LOW));
-        }
-      }
-
-      chrome.tabs.get(tabId, function(tab) {
-        let container = getDomainReportContainer(tab.url);
-        container.addPathnameReport(tab.url, clickJackReport, "clickjack");
-      });
-
-    }
-  );
-  */
-
 }
 
 function processSnapshot(result)
@@ -853,16 +789,6 @@ function processSnapshot(result)
   let domNodes = result.domNodes;
   let layoutTreeNodes = result.layoutTreeNodes;
   let computedStyles = result.computedStyles;
-
-  // console.log("domNodes");
-  // console.dir(domNodes);
-  //
-  // console.log("layoutTreeNodes");
-  // console.dir(layoutTreeNodes);
-  //
-  // console.log("computedStyles");
-  // console.dir(computedStyles);
-
   let clickElems = [];
   let eventReport = [];
 
@@ -888,7 +814,7 @@ function processSnapshot(result)
   }
   chrome.tabs.get(tabId, function(tab) {
     let container = getDomainReportContainer(tab.url);
-    container.addPathnameReport(tab.url, eventReport);
+    container.addPathnameReport(tab.url, eventReport, "Event Listeners");
   });
 
   let maxOverlapResults = 0;
@@ -1015,6 +941,22 @@ function processAnalysis(analysis)
   {
     analysisReport.push(generateReport("May open a new window", SeverityEnum.LOW));
   }
+
+  if (analysis.possibleRedirects > 0)
+  {
+    analysisReport.push(generateReport("May redirect", SeverityEnum.LOW));
+  }
+
+  if (analysis.install > 0)
+  {
+    analysisReport.push(generateReport("May install an extension", SeverityEnum.MILD));
+  }
+
+  if (analysis.execCount > 0)
+  {
+    analysisReport.push(generateReport("Script contains exec - may be malicious", SeverityEnum.MILD));
+  }
+
   return analysisReport;
 }
 
