@@ -82,6 +82,7 @@ function static_analysis(script)
   analysis.possibleRedirects += (script.match(/location\.assign[\s]*=/gi)|| []).length;
   analysis.possibleRedirects += (script.match(/location[\s]*=/gi)|| []).length;
   analysis.possibleRedirects += (script.match(/location[\s]*=/gi)|| []).length;
+  analysis.windowOpen = (script.match(/window.[\s]open/gi)|| []).length;
 
   return analysis;
 }

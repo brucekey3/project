@@ -105,6 +105,7 @@ chrome.windows.onCreated.addListener(function(window) {
 
 });
 
+/*
 chrome.tabs.onCreated.addListener(function(newTab) {
 
   console.log("New tab created - is active: " + newTab.active);
@@ -130,7 +131,7 @@ chrome.tabs.onCreated.addListener(function(newTab) {
   });
 
 });
-
+*/
 chrome.runtime.onMessage.addListener(
   function(request, sender, sendResponse) {
       // Only listen to messages for this tab
@@ -203,6 +204,16 @@ chrome.runtime.onMessage.addListener(
           container.addDomainReport(formReport, "formResult");
         }
       }
+      else if (request.message === "clickJackAnalysis")
+      {
+        console.log("analysed for clikjacking");
+        console.dir(request);
+      }
+      else if (request.message === "windowOpen")
+      {
+        console.log("windowOpen");
+        console.dir(request);
+      }
       else if (request.message === "stopReport")
       {
         console.log("Stopping reporting");
@@ -247,8 +258,15 @@ function beginAnalysis()
 
 function initialise()
 {
+  chrome.debugger.sendCommand({tabId:tabId}, "Debugger.enable", function() {
+    chrome.debugger.sendCommand({tabId:tabId}, "DOMDebugger.setEventListenerBreakpoint", {eventName: "click", targetName: "*"});
+  });
   chrome.debugger.sendCommand({tabId:tabId}, "Network.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.enable");
+  //chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.enable");
+
+  chrome.debugger.sendCommand({tabId:tabId}, "Runtime.enable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Page.enable");
 
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.enable");
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.enable");
@@ -262,8 +280,14 @@ function initialise()
 
 function deinitialise()
 {
-  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Debugger.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Network.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "DOM.disable");
+  //chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.disable");
+
+  chrome.debugger.sendCommand({tabId:tabId}, "Runtime.disable");
+  chrome.debugger.sendCommand({tabId:tabId}, "Page.disable");
+
   chrome.debugger.sendCommand({tabId:tabId}, "Performance.disable");
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.stopPreciseCoverage", {}, null);
   chrome.debugger.sendCommand({tabId:tabId}, "Profiler.disable");
@@ -587,6 +611,148 @@ function processRedirect(details) {
 
 }
 
+var expressionString = `
+var isOverlap = function(rect1, rect2)
+{
+  var overlap = !(rect1.right <= rect2.left ||
+          rect1.left >= rect2.right ||
+          rect1.bottom <= rect2.top ||
+          rect1.top >= rect2.bottom);
+
+  if (overlap)
+  {
+    if (rect1.width + rect1.height === 0)
+    {
+      overlap = false;
+    }
+  }
+  return overlap;
+}
+
+var isClickable = function(node)
+{
+  let clickable = false;
+
+  if (node.tagName)
+  {
+  	let tagName = node.tagName.toLowerCase();
+
+  	clickable |= (tagName === "button");
+  	clickable |= (tagName === "a");
+  }
+  let clickEvents = getEventListeners(node).click;
+
+  if (clickEvents)
+  {
+    clickable |= clickEvents.length > 0;
+  }
+
+  return clickable;
+}
+
+
+var gatherClickElements = function(curnode, gathered)
+{
+    if(isClickable(curnode))
+    {
+      gathered.push(curnode);
+    }
+
+    curnode.childNodes.forEach(function(child) {
+        gatherClickElements(child, gathered);
+    });
+};
+
+var isVisible = function(elem)
+{
+  let styles = window.getComputedStyle(elem);
+  let opacity = styles.getPropertyValue("opacity");
+  let current_color = styles.getPropertyValue("background-color").replace(/\\s/g, '');
+  let match = /rgba?\\((\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*(,\\s*\\d+[\\.\\d+]*)*\\)/g.exec(current_color);
+
+  /*
+  console.dir(current_color);
+  console.dir(match);
+  console.log(opacity);
+  console.log(styles.display);
+  */
+
+  if (match && match.length > 0 && match[0] === "rgba(0,0,0,0)")
+  {
+    return false;
+  }
+  if (!opacity)
+  {
+    return false;
+  }
+
+  if (styles.display === 'none')
+  {
+    return false;
+  }
+
+  return true;
+}
+
+var getClickListeners = function(elem)
+{
+  let res = [];
+  let events = getEventListeners(elem);
+  if (events && events.click)
+  {
+    for (event of events.click)
+    {
+      res.push(event.listener.toString());
+    }
+  }
+  return res;
+}
+
+  var clickElems = [];
+  gatherClickElements(document.documentElement, clickElems);
+
+  var overlapResults = {};
+  for (let i = 0; i < clickElems.length; i++)
+  {
+    let elem = clickElems[i];
+    for (let j = i; j < clickElems.length; j++)
+    {
+      let elem2 = clickElems[j];
+      if (elem != elem2)
+      {
+        let rect1 = elem.getBoundingClientRect();
+        let rect2 = elem2.getBoundingClientRect();
+
+        if (rect1 && rect2)
+        {
+          let overlaps = isOverlap(rect1, rect2);
+          if (overlaps)
+          {
+            let vis1 = isVisible(elem);
+            let vis2 = isVisible(elem2);
+            if ((vis1 && !vis2) || (!vis1 && vis2))
+            {
+              getClickListeners(elem);
+              getClickListeners(elem2);
+
+              let json = JSON.stringify({html: elem.outerHTML, clickListeners: getClickListeners(elem)});
+              let json2= JSON.stringify({html: elem2.outerHTML, clickListeners: getClickListeners(elem2)});
+              if (!overlapResults[json])
+              {
+                overlapResults[json] = [];
+              }
+
+              overlapResults[json].push(json2);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  overlapResults;
+`;
+
 function processDocument(params)
 {
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
@@ -605,6 +771,193 @@ function processDocument(params)
         file: 'scripts/analyseForms.js',
         allFrames: true,
   });
+
+  console.log("Looking for clickjacking");
+
+  let snapshotParams = {
+    computedStyleWhitelist: ["opacity", "display", "background-color"],
+    includeEventListeners: true,
+    includePaintOrder: false,
+    includeUserAgentShadowTree: false // Not sure whether I need this?
+  };
+  chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.getSnapshot",
+                              snapshotParams, processSnapshot);
+}
+
+function processSnapshot(result)
+{
+  let domNodes = result.domNodes;
+  let layoutTreeNodes = result.layoutTreeNodes;
+  let computedStyles = result.computedStyles;
+  let clickElems = [];
+  let eventReport = [];
+
+  // Get all clickable Elements
+  for (node of domNodes)
+  {
+    if (node.isClickable)
+    {
+      clickElems.push(node);
+    }
+
+    if (node.eventListeners)
+    {
+      for (event of node.eventListeners)
+      {
+        if (event.type  === "mousemove")
+        {
+          let reportString = node.nodeName + " is listening to mousemove event."
+          eventReport.push(generateReport(reportString, SeverityEnum.LOW));
+        }
+      }
+    }
+  }
+  chrome.tabs.get(tabId, function(tab) {
+    let container = getDomainReportContainer(tab.url);
+    container.addPathnameReport(tab.url, eventReport, "Event Listeners");
+  });
+
+  let maxOverlapResults = 0;
+  // Get all elements which overlap
+  for (let i = 0; i < clickElems.length; i++)
+  {
+    let elem = clickElems[i];
+    let overlapResults = [];
+    overlapResults.push(elem);
+    for (let j = i; j < clickElems.length; j++)
+    {
+      let elem2 = clickElems[j];
+      if (elem.backendNodeId != elem2.backendNodeId)
+      {
+        if (elem.layoutNodeIndex && elem2.layoutNodeIndex)
+        {
+          let layoutNode1 = layoutTreeNodes[elem.layoutNodeIndex];
+          let layoutNode2 = layoutTreeNodes[elem2.layoutNodeIndex];
+          let rect1 = layoutNode1.boundingBox;
+          let rect2 = layoutNode2.boundingBox;
+
+          let overlaps = isOverlap(rect1, rect2);
+          if (overlaps)
+          {
+            let styleNode1 = {};
+            let styleNode2 = {};
+            if (computedStyles[layoutNode1.styleIndex])
+            {
+              computedStyles[layoutNode1.styleIndex].properties.forEach(function(x) { styleNode1[x.name] = x.value});
+            }
+
+            if (computedStyles[layoutNode2.styleIndex])
+            {
+              computedStyles[layoutNode2.styleIndex].properties.forEach(function(x) { styleNode2[x.name] = x.value});;
+            }
+
+            let vis1 = isVisible(styleNode1);
+            let vis2 = isVisible(styleNode2);
+
+
+            if ((vis1 && !vis2) || (!vis1 && vis2))
+            {
+              let events1 = getClickListeners(elem);
+              let events2 = getClickListeners(elem2);
+
+              //console.dir(events1);
+              //console.dir(events2);
+              overlapResults.push(elem2);
+            }
+          }
+        }
+      }
+    }
+
+    // If we have found an overlap then process this
+    if (overlapResults.length > 1 && overlapResults.length > maxOverlapResults)
+    {
+      maxOverlapResults = overlapResults.length;
+      processOverlapResults(overlapResults);
+    }
+  }
+}
+
+function processRunScriptResult(result, exceptionDetails)
+{
+  console.dir(result);
+  console.dir(exceptionDetails);
+}
+
+function processOverlapResults(overlapResults)
+{
+  console.dir(overlapResults);
+  let clickJackReport = [];
+  let reportString = "Click-jacking warning - " + overlapResults.length
+                   + " clickable elements overlap: including \n";
+
+  for (result of overlapResults)
+  {
+    //clickJackReport = clickJackReport.concat(analyseListeners(result.clickListeners));
+    console.dir(result.eventListeners);
+    if (result.eventListeners)
+    {
+      // #ToDo: Check scripts maybe
+      /*
+      for (listener of result.eventListeners)
+      {
+        let runScriptParams = {
+          scriptId: listener.scriptId,
+          returnByValue: true,
+          generatePreview: true,
+        };
+        chrome.debugger.sendCommand({tabId:tabId}, "Runtime.runScript",
+                                    runScriptParams, processRunScriptResult);
+      }
+      */
+    }
+    reportString += ", " + result.nodeName;
+  }
+  clickJackReport.push(generateReport(reportString, SeverityEnum.LOW));
+
+  chrome.tabs.get(tabId, function(tab) {
+    let container = getDomainReportContainer(tab.url);
+    container.addPathnameReport(tab.url, clickJackReport, "Click-jacking");
+  });
+}
+
+// #ToDo: change this to use scriptIds
+function analyseListeners(listeners)
+{
+  let listenerReport = [];
+  for (listener of listeners)
+  {
+    let analysis = static_analysis(listener);
+    //console.dir(analysis);
+    listenerReport = listenerReport.concat(processAnalysis(analysis));
+  }
+  return listenerReport;
+}
+
+function processAnalysis(analysis)
+{
+  let analysisReport = [];
+  if (analysis.windowOpen > 0)
+  {
+    analysisReport.push(generateReport("May open a new window", SeverityEnum.LOW));
+  }
+
+  if (analysis.possibleRedirects > 0)
+  {
+    analysisReport.push(generateReport("May redirect", SeverityEnum.LOW));
+  }
+
+  if (analysis.install > 0)
+  {
+    analysisReport.push(generateReport("May install an extension", SeverityEnum.MILD));
+  }
+
+  if (analysis.execCount > 0)
+  {
+    analysisReport.push(generateReport("Script contains exec - may be malicious", SeverityEnum.MILD));
+  }
+
+  return analysisReport;
 }
 
 function processLogEntryAdded(params)
@@ -667,14 +1020,61 @@ function onEvent(debuggeeId, message, params) {
   {
     processProfilerResults(params);
   }
+  else if (message === "Page.windowOpen")
+  {
+    // #ToDo
+    processWindowOpen(params);
+  }
   else if (message === "Log.entryAdded")
   {
     processLogEntryAdded(params)
   }
+  else if (message === "Debugger.scriptParsed")
+  {
+    if(params.url !== "" && params.url.indexOf("extension") === -1)
+    {
+      // #ToDo: this
+      //console.log("script parsed");
+      //console.dir(params);
+    }
+  }
+  else if (message === "Debugger.paused")
+  {
+    console.dir(params);
+
+    chrome.debugger.sendCommand({tabId:tabId}, "Debugger.resume");
+  }
 
 }
 
+function processWindowOpen(params)
+{
+  let url = params.url;
+  let windowName = params.windowName;
+  let windowFeatures = params.windowFeatures; // Array
+  let triggeredByUserGesture = params.userGesture;
 
+  console.log("Window opened");
+  console.dir(params);
+
+  let container = getDomainReportContainer(url);
+  let newTabReport = [];
+  let reportText = "";
+  let severity = SeverityEnum.UNKNOWN;
+  if (triggeredByUserGesture)
+  {
+    reportText = "Window opened to this domain - caused by user gesture. \n";
+    reportText += "If this was intentional ignore this.";
+    severity = SeverityEnum.LOW;
+  }
+  else
+  {
+    reportText = "Window opened to this domain - NOT caused by user gesture.";
+    severity = SeverityEnum.HIGH;
+  }
+  newTabReport.push(generateReport(reportText, severity));
+  container.addPathnameReport(url, newTabReport, "windowOpen");
+}
 
 function processInitialResponse(params)
 {

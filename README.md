@@ -42,13 +42,16 @@ mining cryptocurrency on the user's computer.
 
 #### Script Analysis
 
-*  "chrome.webstore.install" which indicates an extension will be installed.
+* "chrome.webstore.install" which indicates an extension will be installed.
 * "document.location" functions which indicates a possible redirection
+* "window.open" function which indicates a new window will be created
 * Presence of "exec" and "unescape" (Although this is not currently shown in the results yet #ToDo)
 
 #### Document Analysis (on every time it is refreshed):
 * Finds all inputs on the page and checks for any of type "password" and if any are found a warning is issued that the page may ask for password input.
 * Also checks description of input nodes for "pass" to find password inputs.
+* Document elements are checked for listeners to mouse movement which may indicate clickjacking
+* All clickable elements are checked for overlaps which could also indicate clickjacking.
 
 ### Dynamic Analysis
 
@@ -58,11 +61,15 @@ mining cryptocurrency on the user's computer.
 
 * Keeps track of and displays the number of console messaged flagged as warnings or errors of the page.
 
+* When a new tab or window are opened, a report is added for the originating domain which informs the user a new tab/window has been opened
+
 #### Function hooks
 
 * "Chrome.webstore.install" is hooked and when called a warning will be displayed that the page is trying to install an extension and relevant information is displayed such as where the install originated from and what the URL is of the install.
 
 * "Notifications.requestPermission" is hooked and when called a warning will be displayed that the page is trying to request permission to send notifications to the user.
+
+* "window.open" is hooked and when called will display the the page is opening a new window
 
 
 ### Anti-Phishing

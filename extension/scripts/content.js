@@ -1,89 +1,129 @@
 // content.js
 
-window.addEventListener ("load", onLoad, false);
+window.addEventListener("load", onLoad, false);
+window.addEventListener("message", receiveMessage, false);
 
-chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
-  //alert(request);
-  console.dir(request);
-});
+function receiveMessage(event)
+{
+    if (!event.data.honey) {
+      return;
+    }
+    console.log(event.data.message);
 
-document.addEventListener("hookEvent", function(data) {
-  console.log("triggered!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-  console.dir(data);
-  // Pass the custom message that's passed in through the event
-  chrome.runtime.sendMessage({
-    message: data.detail.message,
-    data: data.detail.data
-  });
-});
+    chrome.runtime.sendMessage({
+      message: event.data.message,
+      data: event.data.data
+    });
+}
 
 function onLoad(e) {
-  document.honeyBrowserEvent = {};
+  window.honeyBrowserEvent = {};
   chrome.runtime.sendMessage({
-      "message": "hasLoaded"
+    "message": "hasLoaded"
   });
 
-  chrome.runtime.sendMessage({"message": "getExtensionId"} ,
-   function(response)
-   {
-     if (!response)
-     {
-       return;
-     }
-     let extensionId = response.extensionId;
-     injectChromeWebstoreInstallHook(extensionId);
-     injectNotificationHook(extensionId);
-   });
+  chrome.runtime.sendMessage({
+      "message": "getExtensionId"
+    },
+    function(response) {
+      if (!response) {
+        return;
+      }
 
+      let extensionId = response.extensionId;
+      injectChromeWebstoreInstallHook(extensionId);
+      injectNotificationHook(extensionId);
+      injectWindowOpenHook(extensionId);
+      injectElementDispatchEventHook(extensionId);
+    });
 }
 
-function injectNotificationHook(extensionId)
-{
-  let functionToInject = function(extensionId)
-  {
+
+function injectWindowOpenHook(extensionId) {
+  let functionToInject = function(extensionId) {
+    let store = window.open;
+    window.open = function(url, windowName) {
+      let data = {
+        honey: true,
+        message: "windowOpen",
+        data: {
+          iniatiatorUrl: document.location.href
+        }
+      };
+      window.postMessage(data, "*");
+      return store.apply(this, arguments);
+    };
+  };
+  injectFunction(functionToInject, extensionId);
+}
+
+
+
+
+function injectNotificationHook(extensionId) {
+  let functionToInject = function(extensionId) {
     let store = Notification.requestPermission;
     Notification.requestPermission = function(callback) {
-      let detailObj = {};
-      detailObj.iniatiatorUrl = document.location.href;
-      document.honeyBrowserEvent = new CustomEvent('Event', {detail: {
+      let data = {
+        honey: true,
         message: "notificationsRequested",
-        data: detailObj
-      }});
-      document.honeyBrowserEvent.initEvent('hookEvent');
-      document.dispatchEvent(document.honeyBrowserEvent);
-      return store(callback);
+        data: {
+          iniatiatorUrl: document.location.href
+        }
+      };
+      window.postMessage(data, "*");
+      return store.apply(this, arguments);
     };
   };
   injectFunction(functionToInject, extensionId);
 }
 
-function injectChromeWebstoreInstallHook(extensionId)
-{
-  let functionToInject = function(extensionId)
-  {
+function injectElementDispatchEventHook(extensionId) {
+  let functionToInject = function(extensionId) {
+    let store = Element.prototype.dispatchEvent;
+    Element.prototype.dispatchEvent = function(name, cb) {
+      if (!name.isTrusted) {
+          let data = {
+            honey: true,
+            message: "ElementDispatchEvent",
+            data: {
+              iniatiatorUrl: document.location.href
+            }
+          };
+          window.postMessage(data, "*");
+      }
+
+
+      return store.apply(this, arguments);
+    };
+  };
+  injectFunction(functionToInject, extensionId);
+}
+
+function injectChromeWebstoreInstallHook(extensionId) {
+  let functionToInject = function(extensionId) {
     let store = chrome.webstore.install;
     chrome.webstore.install = function(url, onSuccess, onFailure) {
-      let detailObj = {};
-      detailObj.webstoreUrl = url;
-      detailObj.iniatiatorUrl = document.location.href;
-      document.honeyBrowserEvent = new CustomEvent('Event', {detail: {
+      let data = {
+        honey: true,
         message: "extensionInstallStarted",
-        data: detailObj
-      }});
-      document.honeyBrowserEvent.initEvent('hookEvent');
-      document.dispatchEvent(document.honeyBrowserEvent);
-      return store(url, onSuccess, onFailure);
+        data: {
+          webstoreUrl: url,
+          iniatiatorUrl: document.location.href
+        }
+      }
+      window.postMessage(data, "*");
+      return store.apply(this, arguments);
     };
   };
   injectFunction(functionToInject, extensionId);
 }
 
-function injectFunction(functionToInject, extensionId)
-{
+function injectFunction(functionToInject, extensionId) {
   let code = '(' + functionToInject + ')(' + JSON.stringify(extensionId) + ');';
   let script = document.createElement("script");
   script.textContent = code;
-  (document.head||document.documentElement).appendChild(script);
+  (document.head || document.documentElement).appendChild(script);
   script.remove();
 }
 
