@@ -939,17 +939,17 @@ function processAnalysis(analysis)
   let analysisReport = [];
   if (analysis.windowOpen > 0)
   {
-    analysisReport.push(generateReport("May open a new window", SeverityEnum.LOW));
+    analysisReport.push(generateReport("Script may open a new window", SeverityEnum.LOW));
   }
 
   if (analysis.possibleRedirects > 0)
   {
-    analysisReport.push(generateReport("May redirect", SeverityEnum.LOW));
+    analysisReport.push(generateReport("Script contains possible location change - may redirect", SeverityEnum.LOW));
   }
 
   if (analysis.install > 0)
   {
-    analysisReport.push(generateReport("May install an extension", SeverityEnum.MILD));
+    analysisReport.push(generateReport("Script may install an extension", SeverityEnum.MILD));
   }
 
   if (analysis.execCount > 0)

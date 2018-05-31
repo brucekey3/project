@@ -45,7 +45,7 @@ mining cryptocurrency on the user's computer.
 * "chrome.webstore.install" which indicates an extension will be installed.
 * "document.location" functions which indicates a possible redirection
 * "window.open" function which indicates a new window will be created
-* Presence of "exec" and "unescape" (Although this is not currently shown in the results yet #ToDo)
+* Presence of "exec" considered suspicious
 
 #### Document Analysis (on every time it is refreshed):
 * Finds all inputs on the page and checks for any of type "password" and if any are found a warning is issued that the page may ask for password input.
