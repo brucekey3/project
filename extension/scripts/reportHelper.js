@@ -51,16 +51,16 @@ function setSeverityAttributes(elem, severity)
   switch (severity)
   {
     case SeverityEnum.LOW:
-      elem.style.backgroundColor = "orange";
+      elem.style.backgroundColor = "yellow";
       break;
     case SeverityEnum.MILD:
-      elem.style.backgroundColor = "orangeRed";
+      elem.style.backgroundColor = "orange";
       break;
     case SeverityEnum.HIGH:
-      elem.style.backgroundColor = "darkRed";
+      elem.style.backgroundColor = "orangeRed";
       break;
     case SeverityEnum.SEVERE:
-      elem.style.backgroundColor = "red";
+      elem.style.backgroundColor = "#ff1717";
       break;
     default:
       elem.style.backgroundColor = "white";

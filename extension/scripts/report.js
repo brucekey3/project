@@ -150,7 +150,7 @@ chrome.runtime.onMessage.addListener(
         // to
         if (details && details.iniatiatorUrl)
         {
-          let reportString = "Page may be trying to install an extension!";
+          let reportString = "Page is trying to install an extension!";
           extensionReport.push(generateReport(reportString, SeverityEnum.SEVERE));
           if (details.webstoreUrl)
           {
@@ -1744,16 +1744,10 @@ function processResponseBody(params)
 
 function createScriptReport(script)
 {
-  let report = []
-  let analysis = static_analysis(script);
-  //console.dir(analysis);
-  if (analysis.install && analysis.install > 0)
-  {
-    report.push(generateReport("This page may try and install an extension!", SeverityEnum.SEVERE));
-  }
-  // TODO: add report here for location change
 
-  return report;
+  let analysis = static_analysis(script);
+
+  return processAnalysis(analysis);;
 }
 
 // This needs to take in the details object so that we can add relevant
