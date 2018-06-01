@@ -1734,7 +1734,7 @@ function processResponseBody(params)
         if (scriptReport.length > 0)
         {
           reportToBeDisplayed = true;
-          container.addPathnameReport(url, scriptReport);
+          container.addPathnameReport(url, scriptReport, "Script Report");
         }
 
       });
