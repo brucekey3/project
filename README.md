@@ -25,6 +25,8 @@ mining cryptocurrency on the user's computer.
 
 * The URL is checked for any special characters (such as '<', '>', '@' for example) and if any are found then it is deemed suspicious.
 
+* URL path is checked for number of '/'. If greater than 5 a warning is issued to the user.
+
 * The number of requests is kept track of and displayed
 
 ### Response Processing
