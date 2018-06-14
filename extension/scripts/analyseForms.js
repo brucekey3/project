@@ -31,7 +31,8 @@ var dataGenerator = {
   state: "Ohio",
   county: "London",
   postCode: "BN24 6RB",
-  zipCode: "10012"
+  zipCode: "10012",
+  phoneNummber: "07123456789"
 }
 
 function bruteForceGuess(field)
@@ -103,7 +104,8 @@ function bruteForceGuess(field)
         winningVotes = votes[choice];
       }
     }
-    else if (name.indexOf("name") !== -1 || value.indexOf("name") !== -1)
+    // Ignore checking if attribute is called "name" since this is already used
+    else if (value.indexOf("name") !== -1)
     {
       //field.value = "Fake Name";
       let choice = "name";
@@ -150,7 +152,72 @@ function bruteForceGuess(field)
         winningVotes = votes[choice];
       }
     }
+    else if (name.indexOf("address") !== -1 || value.indexOf("address") !== -1)
+    {
+      let choice = "address";
+      vote(votes, choice);
+      if (votes[choice] > winningVotes)
+      {
+        winner = choice;
+        winningVotes = votes[choice];
+      }
+    }
+    else if (name.indexOf("city") !== -1 || value.indexOf("city") !== -1)
+    {
+      let choice = "city";
+      vote(votes, choice);
+      if (votes[choice] > winningVotes)
+      {
+        winner = choice;
+        winningVotes = votes[choice];
+      }
+    }
+    else if (name.indexOf("state") !== -1 || value.indexOf("state") !== -1)
+    {
+      let choice = "state";
+      vote(votes, choice);
+      if (votes[choice] > winningVotes)
+      {
+        winner = choice;
+        winningVotes = votes[choice];
+      }
+    }
+    else if (name.indexOf("county") !== -1 || value.indexOf("county") !== -1)
+    {
+      let choice = "county";
+      vote(votes, choice);
+      if (votes[choice] > winningVotes)
+      {
+        winner = choice;
+        winningVotes = votes[choice];
+      }
+    }
+    else if (name.indexOf("phone") !== -1 || value.indexOf("phone") !== -1)
+    {
+      let choice = "phoneNummber";
+      vote(votes, choice);
+      if (votes[choice] > winningVotes)
+      {
+        winner = choice;
+        winningVotes = votes[choice];
+      }
+    }
+    else if (name.indexOf("zip") !== -1 || value.indexOf("zip") !== -1)
+    {
+      //field.value = "BN24 6RB";
+      let choice = "zipCode";
+      vote(votes, choice);
+      if (votes[choice] > winningVotes)
+      {
+        winner = choice;
+        winningVotes = votes[choice];
+      }
+    }
+
+
   }
+
+
   console.dir(votes);
   if (winningVotes > 0)
   {
