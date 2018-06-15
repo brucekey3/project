@@ -627,7 +627,7 @@ function processDocument(params)
         console.log("beef");
         console.dir(resultObject);
         chrome.tabs.get(tabId, function(tab) {
-          processBeefPresence(tab.url);
+          processBeefPresence(tab.url, "window.beef object");
         });
       }
     }
@@ -663,14 +663,14 @@ function processDocument(params)
                               snapshotParams, processSnapshot);
 }
 
-function processBeefPresence(url)
+function processBeefPresence(url, reason)
 {
   let beefReport = [];
-  let reportText = "Possible use of Browser Exploitation Framework found on page!";
+  let reportText = "Possible use of Browser Exploitation Framework found on page! " + reason + " found.";
   beefReport.push(generateReport(reportText, SeverityEnum.SEVERE));
 
   let container = getDomainReportContainer(url);
-  container.addPathnameReport(url, beefReport, "BEEF");
+  container.addPathnameReport(url, beefReport, reason);
 }
 
 function processSnapshot(result)
@@ -1523,7 +1523,7 @@ function processRequest(details)
 
   if (parser.search && parser.search.indexOf("BEEFHOOK") !== -1)
   {
-    processBeefPresence(url);
+    processBeefPresence(url, "BEEFHOOK");
   }
 
   // If it's a data: or chrome-extension: url then don't send safebrowsing check

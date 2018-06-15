@@ -29,6 +29,8 @@ mining cryptocurrency on the user's computer.
 
 * The number of requests is kept track of and displayed
 
+* The request parameters are searched for the presence of "BEEFHOOK" which, if not configured, indicate a website is hooked with the Browser Exploitation Framework (BeEF).
+
 ### Response Processing
 * If the connection is secured over HTTPS then the certificate is examined and displayed to the user. The date that the certificate was issued and the date that it expires are examined in order to determine whether it is still valid and novel results are used to do a preliminary check whether or not the site is likely suspicious. This is not to be trusted too much, however, since many certificates from legitimate sites and malicious sites can seem similar.
 
@@ -64,6 +66,8 @@ mining cryptocurrency on the user's computer.
 * Keeps track of and displays the number of console messaged flagged as warnings or errors of the page.
 
 * When a new tab or window are opened, a report is added for the originating domain which informs the user a new tab/window has been opened
+
+* If the window object contains the attribute "beef" i.e. "window.beef" is not undefined then if the instance was not configured differently this indicates a website is hooked with the Browser Exploitation Framework (BeEF).
 
 #### Function hooks
 
