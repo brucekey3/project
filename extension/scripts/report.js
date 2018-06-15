@@ -611,150 +611,29 @@ function processRedirect(details) {
 
 }
 
-var expressionString = `
-var isOverlap = function(rect1, rect2)
-{
-  var overlap = !(rect1.right <= rect2.left ||
-          rect1.left >= rect2.right ||
-          rect1.bottom <= rect2.top ||
-          rect1.top >= rect2.bottom);
-
-  if (overlap)
-  {
-    if (rect1.width + rect1.height === 0)
-    {
-      overlap = false;
-    }
-  }
-  return overlap;
-}
-
-var isClickable = function(node)
-{
-  let clickable = false;
-
-  if (node.tagName)
-  {
-  	let tagName = node.tagName.toLowerCase();
-
-  	clickable |= (tagName === "button");
-  	clickable |= (tagName === "a");
-  }
-  let clickEvents = getEventListeners(node).click;
-
-  if (clickEvents)
-  {
-    clickable |= clickEvents.length > 0;
-  }
-
-  return clickable;
-}
-
-
-var gatherClickElements = function(curnode, gathered)
-{
-    if(isClickable(curnode))
-    {
-      gathered.push(curnode);
-    }
-
-    curnode.childNodes.forEach(function(child) {
-        gatherClickElements(child, gathered);
-    });
-};
-
-var isVisible = function(elem)
-{
-  let styles = window.getComputedStyle(elem);
-  let opacity = styles.getPropertyValue("opacity");
-  let current_color = styles.getPropertyValue("background-color").replace(/\\s/g, '');
-  let match = /rgba?\\((\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)\\s*(,\\s*\\d+[\\.\\d+]*)*\\)/g.exec(current_color);
-
-  /*
-  console.dir(current_color);
-  console.dir(match);
-  console.log(opacity);
-  console.log(styles.display);
-  */
-
-  if (match && match.length > 0 && match[0] === "rgba(0,0,0,0)")
-  {
-    return false;
-  }
-  if (!opacity)
-  {
-    return false;
-  }
-
-  if (styles.display === 'none')
-  {
-    return false;
-  }
-
-  return true;
-}
-
-var getClickListeners = function(elem)
-{
-  let res = [];
-  let events = getEventListeners(elem);
-  if (events && events.click)
-  {
-    for (event of events.click)
-    {
-      res.push(event.listener.toString());
-    }
-  }
-  return res;
-}
-
-  var clickElems = [];
-  gatherClickElements(document.documentElement, clickElems);
-
-  var overlapResults = {};
-  for (let i = 0; i < clickElems.length; i++)
-  {
-    let elem = clickElems[i];
-    for (let j = i; j < clickElems.length; j++)
-    {
-      let elem2 = clickElems[j];
-      if (elem != elem2)
-      {
-        let rect1 = elem.getBoundingClientRect();
-        let rect2 = elem2.getBoundingClientRect();
-
-        if (rect1 && rect2)
-        {
-          let overlaps = isOverlap(rect1, rect2);
-          if (overlaps)
-          {
-            let vis1 = isVisible(elem);
-            let vis2 = isVisible(elem2);
-            if ((vis1 && !vis2) || (!vis1 && vis2))
-            {
-              getClickListeners(elem);
-              getClickListeners(elem2);
-
-              let json = JSON.stringify({html: elem.outerHTML, clickListeners: getClickListeners(elem)});
-              let json2= JSON.stringify({html: elem2.outerHTML, clickListeners: getClickListeners(elem2)});
-              if (!overlapResults[json])
-              {
-                overlapResults[json] = [];
-              }
-
-              overlapResults[json].push(json2);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  overlapResults;
-`;
-
 function processDocument(params)
 {
+  chrome.debugger.sendCommand({tabId:tabId},"Runtime.evaluate",
+   {
+     expression: "window.beef",
+     returnByValue:true
+   },
+   function(result, exceptionDetails) {
+    if (!exceptionDetails)
+    {
+      let resultObject = result.result;
+      if (resultObject && resultObject.type !== "undefined")
+      {
+        console.log("beef");
+        console.dir(resultObject);
+        chrome.tabs.get(tabId, function(tab) {
+          processBeefPresence(tab.url, "window.beef object");
+        });
+      }
+    }
+   }
+  );
+
   chrome.debugger.sendCommand({tabId:tabId}, "DOM.getDocument", {depth: -1, pierce: true}, function(root){
     if (chrome.runtime.lastError)
     {
@@ -782,6 +661,16 @@ function processDocument(params)
   };
   chrome.debugger.sendCommand({tabId:tabId}, "DOMSnapshot.getSnapshot",
                               snapshotParams, processSnapshot);
+}
+
+function processBeefPresence(url, reason)
+{
+  let beefReport = [];
+  let reportText = "Possible use of Browser Exploitation Framework found on page! " + reason + " found.";
+  beefReport.push(generateReport(reportText, SeverityEnum.SEVERE));
+
+  let container = getDomainReportContainer(url);
+  container.addPathnameReport(url, beefReport, reason);
 }
 
 function processSnapshot(result)
@@ -1631,6 +1520,12 @@ function processRequest(details)
 
   let url = details.url;
   let parser = decomposeUrl(url);
+
+  if (parser.search && parser.search.indexOf("BEEFHOOK") !== -1)
+  {
+    processBeefPresence(url, "BEEFHOOK");
+  }
+
   // If it's a data: or chrome-extension: url then don't send safebrowsing check
   if (parser.hostname !== "" && parser.protocol != "chrome-extension:")
   {

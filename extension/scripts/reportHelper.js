@@ -276,7 +276,11 @@ class DomainContainer
       return;
     }
     pathnamesContainer.appendChild(pathnameContainerObj.pathnameContainer);
-    pathnamesContainer.appendChild(document.createElement("br"));
+
+    if (pathnamesContainer.lastChild.tagName !== "br")
+    {
+      //pathnamesContainer.appendChild(document.createElement("br"));
+    }
 
   }
 
